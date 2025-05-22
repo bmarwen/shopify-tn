@@ -1,4 +1,3 @@
-// src/middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
@@ -21,13 +20,14 @@ export async function middleware(request: NextRequest) {
   // Main store.tn domain handling
   if (!subdomain || subdomain === "www") {
     // This is for the main store.tn site
-    if (pathname.startsWith("/admin") && !isAuthenticated(request)) {
+    if (pathname.startsWith("/admin") && !(await isAuthenticated(request))) {
       return redirectToLogin(request);
     }
-
     // Continue to the main store application
     return NextResponse.next({
-      request: { headers: requestHeaders },
+      request: {
+        headers: requestHeaders,
+      },
     });
   }
 
@@ -49,20 +49,26 @@ export async function middleware(request: NextRequest) {
 
     // User is authenticated and authorized for this shop's admin
     return NextResponse.next({
-      request: { headers: requestHeaders },
+      request: {
+        headers: requestHeaders,
+      },
     });
   }
 
   // API routes
   if (pathname.startsWith("/api/")) {
     return NextResponse.next({
-      request: { headers: requestHeaders },
+      request: {
+        headers: requestHeaders,
+      },
     });
   }
 
   // All other routes are for the storefront
   return NextResponse.next({
-    request: { headers: requestHeaders },
+    request: {
+      headers: requestHeaders,
+    },
   });
 }
 
@@ -78,7 +84,6 @@ function getSubdomainFromHostname(hostname: string): string | null {
   if (parts.length > 2) {
     return parts[0];
   }
-
   return null;
 }
 
@@ -109,7 +114,7 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
 // Match all pathnames except for assets, public routes, etc.
 export const config = {
   matcher: [
-    /*
+    /**
      * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)

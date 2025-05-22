@@ -26,7 +26,6 @@ import PricingTab from "./product-tabs/pricing-tab";
 import CategoriesTab from "./product-tabs/categories-tab";
 import VariantsTab from "./product-tabs/variants-tab";
 import CustomFieldsTab from "./product-tabs/custom-fields-tab";
-import OrderHistoryTab from "./product-tabs/order-history-tab";
 
 export default function ProductForm({
   product,
@@ -272,20 +271,6 @@ export default function ProductForm({
             >
               Custom Fields
             </TabsTrigger>
-            {/* Only show order history tab when editing */}
-            {isEditing && product?.id && (
-              <TabsTrigger
-                className="rounded-md"
-                style={{
-                  backgroundColor:
-                    activeTab === "order-history" ? "#2c3e50" : "transparent",
-                  color: activeTab === "order-history" ? "white" : "#bdc3c7",
-                }}
-                value="order-history"
-              >
-                Order History
-              </TabsTrigger>
-            )}
           </TabsList>
 
           {/* Tab Contents */}
@@ -326,13 +311,6 @@ export default function ProductForm({
               onFormStateChange={updateFormState}
             />
           </TabsContent>
-
-          {/* Only render order history content when editing */}
-          {isEditing && product?.id && (
-            <TabsContent value="order-history">
-              <OrderHistoryTab productId={product.id} />
-            </TabsContent>
-          )}
         </Tabs>
         <div className="flex justify-end gap-4">
           <Button

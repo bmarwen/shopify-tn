@@ -27,10 +27,12 @@ import { useToast } from "@/components/ui/use-toast";
 
 interface ProductListActionsProps {
   productId: string;
+  onDelete?: () => void;
 }
 
 export default function ProductListActions({
   productId,
+  onDelete,
 }: ProductListActionsProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -60,8 +62,7 @@ export default function ProductListActions({
       // Close the dialog
       setShowDeleteDialog(false);
 
-      // Refresh the page
-      router.refresh();
+      onDelete?.(); // Call the callback
     } catch (error) {
       console.error("Error deleting product:", error);
 

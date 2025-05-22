@@ -1,9 +1,9 @@
-// src/app/api/products/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
+import { s3ImageService } from "@/lib/services/s3-image.service";
 
 // GET a specific product
 export async function GET(
@@ -12,11 +12,9 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session || !session.user.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     const shopId = session.user.shopId;
     const productId = params.id;
 
@@ -41,7 +39,36 @@ export async function GET(
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    return NextResponse.json(product);
+    // Process S3 image URLs
+    let productWithUrls = { ...product };
+    if (product.images && product.images.length > 0) {
+      try {
+        const processedImages = await Promise.all(
+          product.images.map(async (image) => {
+            if (s3ImageService.isS3Key(image)) {
+              try {
+                return await s3ImageService.getImageUrl(image);
+              } catch (error) {
+                console.error(`Error getting image URL for ${image}:`, error);
+                return image; // Return original key if URL generation fails
+              }
+            }
+            return image; // Return original URL if not an S3 key
+          })
+        );
+
+        productWithUrls = {
+          ...product,
+          images: processedImages,
+          s3Keys: product.images, // Store original keys for reference
+        };
+      } catch (error) {
+        console.error("Error processing product images:", error);
+        // Continue with original product if image processing fails
+      }
+    }
+
+    return NextResponse.json(productWithUrls);
   } catch (error) {
     console.error("Error fetching product:", error);
     return NextResponse.json(
@@ -58,7 +85,6 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-
     if (
       !session ||
       !session.user.shopId ||
@@ -66,7 +92,6 @@ export async function PUT(
     ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     const shopId = session.user.shopId;
     const productId = params.id;
     const body = await req.json();
@@ -123,6 +148,60 @@ export async function PUT(
       }
     }
 
+    // Process images - handle any new base64 images and track which S3 images to delete
+    const processedImages = [];
+    const imagesToDelete = [];
+
+    // Find which existing images are being removed
+    if (existingProduct.images && existingProduct.images.length > 0) {
+      for (const oldImage of existingProduct.images) {
+        if (
+          s3ImageService.isS3Key(oldImage) &&
+          (!images || !images.includes(oldImage))
+        ) {
+          imagesToDelete.push(oldImage);
+        }
+      }
+    }
+
+    // Process new images
+    if (images && images.length > 0) {
+      for (const image of images) {
+        if (image.startsWith("data:")) {
+          // New base64 image to upload to S3
+          try {
+            const fileNameBase = `${productSlug}-${Date.now()}`;
+            const uploadResult = await s3ImageService.uploadImage(
+              image,
+              `${fileNameBase}.jpg`,
+              "products"
+            );
+            processedImages.push(uploadResult.key);
+          } catch (uploadError) {
+            console.error("Error uploading product image to S3:", uploadError);
+            // Skip this image if upload fails
+          }
+        } else {
+          // Existing image URL or S3 key
+          processedImages.push(image);
+        }
+      }
+    }
+
+    // Delete old S3 images that are no longer used
+    for (const imageToDelete of imagesToDelete) {
+      try {
+        await s3ImageService.deleteImage(imageToDelete);
+        console.log(`Deleted old product image: ${imageToDelete}`);
+      } catch (deleteError) {
+        console.error(
+          `Error deleting product image ${imageToDelete}:`,
+          deleteError
+        );
+        // Continue with update even if image deletion fails
+      }
+    }
+
     // Update the product in a transaction
     const updatedProduct = await db.$transaction(async (tx) => {
       // Update the product
@@ -139,7 +218,7 @@ export async function PUT(
           inventory,
           tva,
           expiryDate: expiryDate ? new Date(expiryDate) : null,
-          images: images || [],
+          images: processedImages, // Use the processed images array
           categories: {
             set: [], // Clear existing categories
             connect: categoryIds?.map((id: string) => ({ id })) || [],
@@ -175,7 +254,6 @@ export async function PUT(
         const variantIds = variants
           .filter((v: any) => v.id)
           .map((v: any) => v.id);
-
         if (variantIds.length > 0) {
           await tx.productVariant.deleteMany({
             where: {
@@ -242,7 +320,35 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(completeProduct);
+    // Process S3 image URLs for response
+    let responseProduct = completeProduct;
+    if (
+      completeProduct &&
+      completeProduct.images &&
+      completeProduct.images.length > 0
+    ) {
+      const imageUrls = await Promise.all(
+        completeProduct.images.map(async (image) => {
+          if (s3ImageService.isS3Key(image)) {
+            try {
+              return await s3ImageService.getImageUrl(image);
+            } catch (error) {
+              console.error(`Error getting image URL for ${image}:`, error);
+              return image; // Return original key if URL generation fails
+            }
+          }
+          return image; // Return original URL if not an S3 key
+        })
+      );
+
+      responseProduct = {
+        ...completeProduct,
+        images: imageUrls,
+        s3Keys: completeProduct.images, // Keep original keys for reference
+      };
+    }
+
+    return NextResponse.json(responseProduct);
   } catch (error) {
     console.error("Error updating product:", error);
     return NextResponse.json(
@@ -259,7 +365,6 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-
     if (
       !session ||
       !session.user.shopId ||
@@ -267,7 +372,6 @@ export async function DELETE(
     ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     const shopId = session.user.shopId;
     const productId = params.id;
 
@@ -277,11 +381,19 @@ export async function DELETE(
         id: productId,
         shopId,
       },
+      select: {
+        id: true,
+        images: true,
+      },
     });
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
+
+    // Get any S3 image keys that need to be deleted
+    const s3ImagesToDelete =
+      product.images?.filter((image) => s3ImageService.isS3Key(image)) || [];
 
     // Delete in a transaction to ensure all related records are deleted properly
     await db.$transaction(async (tx) => {
@@ -310,7 +422,6 @@ export async function DELETE(
       const cartItemCount = await tx.cartItem.count({
         where: { productId },
       });
-
       if (cartItemCount > 0) {
         // Delete cart items that reference this product
         await tx.cartItem.deleteMany({
@@ -318,16 +429,10 @@ export async function DELETE(
         });
       }
 
-      const orderItemCount = await tx.orderItem.count({
+      await tx.orderItem.updateMany({
         where: { productId },
+        data: { productId: null },
       });
-
-      if (orderItemCount > 0) {
-        // Instead of blocking deletion, provide specific error
-        throw new Error(
-          "Cannot delete product that is in completed orders. Please archive it instead."
-        );
-      }
 
       // 6. Disconnect product from all categories (many-to-many relation)
       await tx.product.update({
@@ -344,6 +449,22 @@ export async function DELETE(
         where: { id: productId },
       });
     });
+
+    // After successful transaction, delete images from S3
+    if (s3ImagesToDelete.length > 0) {
+      for (const imageKey of s3ImagesToDelete) {
+        try {
+          await s3ImageService.deleteImage(imageKey);
+          console.log(`Deleted product image from S3: ${imageKey}`);
+        } catch (error) {
+          console.error(
+            `Error deleting product image ${imageKey} from S3:`,
+            error
+          );
+          // Continue even if S3 deletion fails - the product is already deleted
+        }
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

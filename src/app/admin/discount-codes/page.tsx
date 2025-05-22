@@ -17,30 +17,29 @@ import { Plus } from "lucide-react";
 import DiscountCodeListActions from "@/components/admin/discount-code-list-actions";
 import Pagination from "@/components/admin/pagination";
 
+interface DiscountCodesPageProps {
+  searchParams: {
+    [key: string]: string | string[] | undefined;
+  };
+}
+
 export default async function DiscountCodesPage({
   searchParams,
-}: {
-  searchParams: {
-    page?: string;
-    perPage?: string;
-    product?: string;
-    user?: string;
-  };
-}) {
+}: DiscountCodesPageProps) {
   // Check authentication
   const session = await getServerSession(authOptions);
-
   if (!session?.user?.shopId) {
     redirect("/login?callbackUrl=/admin/discount-codes");
   }
-
   const shopId = session.user.shopId;
 
-  // Parse pagination params
-  const page = parseInt(searchParams.page || "1");
-  const perPage = parseInt(searchParams.perPage || "10");
-  const productId = searchParams.product;
-  const userId = searchParams.user;
+  // Parse pagination params safely
+  const page = parseInt(String(searchParams.page) || "1");
+  const perPage = parseInt(String(searchParams.perPage) || "10");
+  const productId = searchParams.product
+    ? String(searchParams.product)
+    : undefined;
+  const userId = searchParams.user ? String(searchParams.user) : undefined;
 
   // Build where clause for filtering
   const where: any = { shopId };

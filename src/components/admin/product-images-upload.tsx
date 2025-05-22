@@ -1,4 +1,3 @@
-// src/components/admin/product-images-upload.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,6 +14,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { s3ImageService } from "@/lib/services/s3-image.service";
 
 interface ProductImagesUploadProps {
   existingImages: string[];
@@ -63,14 +63,25 @@ export default function ProductImagesUpload({
 
     // Initialize preview images for existing images
     const initialPreviews: Record<string, string> = {};
-    existingImages?.forEach((img: string) => {
-      // Only create previews for items that appear to be URLs or paths
+
+    existingImages?.forEach(async (img: string) => {
+      // Only create previews for items that appear to be URLs or S3 keys
       // and aren't already in the preview cache
-      if (
-        (img.startsWith("http") || img.startsWith("/")) &&
-        !previewImages[img]
-      ) {
-        initialPreviews[img] = img;
+      if (img && !previewImages[img]) {
+        if (img.startsWith("http") || img.startsWith("/")) {
+          // For HTTP URLs or local paths
+          initialPreviews[img] = img;
+        } else if (s3ImageService.isS3Key(img)) {
+          // For S3 keys, get the URL
+          try {
+            const imageUrl = await s3ImageService.getImageUrl(img);
+            initialPreviews[img] = imageUrl;
+          } catch (error) {
+            console.error(`Error getting URL for S3 image ${img}:`, error);
+            // Use a placeholder or just the key itself
+            initialPreviews[img] = img;
+          }
+        }
       }
     });
 
@@ -81,7 +92,6 @@ export default function ProductImagesUpload({
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-
     setIsUploading(true);
 
     try {
@@ -96,21 +106,29 @@ export default function ProductImagesUpload({
         // Create a unique ID for this image
         const imageId = `image_${Date.now()}_${i}`;
 
-        // Create a preview URL
-        const imageUrl = URL.createObjectURL(file);
-        newPreviews[imageId] = imageUrl;
+        // Create a base64 data URL for the image
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            const imageDataUrl = event.target.result as string;
+            newPreviews[imageId] = imageDataUrl;
 
-        // In production, you would upload the file and get a permanent URL
-        // For now, we'll use the imageId as a placeholder for the real URL
-        newImages.push(imageId);
+            // Add the data URL to the images array to be processed by the S3 service later
+            newImages.push(imageDataUrl);
+
+            // Update state if this is the last file
+            if (i === e.target.files!.length - 1) {
+              setImages(newImages);
+              setPreviewImages(newPreviews);
+              onImagesChange(newImages);
+              setIsUploading(false);
+            }
+          }
+        };
+        reader.readAsDataURL(file);
       }
-
-      setImages(newImages);
-      setPreviewImages(newPreviews);
-      onImagesChange(newImages);
     } catch (error) {
       console.error("Error uploading images:", error);
-    } finally {
       setIsUploading(false);
     }
   };
@@ -125,7 +143,6 @@ export default function ProductImagesUpload({
       if (previewImages[removedImageId].startsWith("blob:")) {
         URL.revokeObjectURL(previewImages[removedImageId]);
       }
-
       const newPreviews = { ...previewImages };
       delete newPreviews[removedImageId];
       setPreviewImages(newPreviews);
@@ -145,7 +162,6 @@ export default function ProductImagesUpload({
 
     const newImages = [...images];
     const newIndex = direction === "up" ? index - 1 : index + 1;
-
     [newImages[index], newImages[newIndex]] = [
       newImages[newIndex],
       newImages[index],
@@ -165,6 +181,13 @@ export default function ProductImagesUpload({
     // Handle existing images that could be URLs or paths
     if (imageId.startsWith("http") || imageId.startsWith("/")) {
       return imageId;
+    }
+
+    // Handle S3 keys - in this component we should already have URLs in the preview state
+    // But include this for safety
+    if (s3ImageService.isS3Key(imageId)) {
+      // For the UI display, we return a placeholder while loading S3 URL
+      return "/placeholder.jpg";
     }
 
     // Log for debugging
@@ -285,6 +308,7 @@ export default function ProductImagesUpload({
                     <MoveDown className="h-4 w-4" />
                   </Button>
                 </div>
+
                 <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
                   {index === 0 ? "Main" : `Image ${index + 1}`}
                 </div>

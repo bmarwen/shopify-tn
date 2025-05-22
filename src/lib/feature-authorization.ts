@@ -1,4 +1,3 @@
-// src/lib/feature-authorization.ts
 import { PlanType, Role } from "@prisma/client";
 
 // Define all available features
@@ -112,6 +111,7 @@ const ROLE_ACCESS: Record<string, Record<Feature, boolean>> = {
     [Feature.PRIORITY_SUPPORT]: true,
     [Feature.BULK_OPERATIONS]: true,
   },
+
   SHOP_STAFF: {
     // Staff have limited access
     [Feature.PRODUCTS_MANAGEMENT]: true,
@@ -130,6 +130,7 @@ const ROLE_ACCESS: Record<string, Record<Feature, boolean>> = {
     [Feature.PRIORITY_SUPPORT]: true,
     [Feature.BULK_OPERATIONS]: true,
   },
+
   CUSTOMER: {
     // Customers have no access to these features
     [Feature.PRODUCTS_MANAGEMENT]: false,
@@ -148,6 +149,7 @@ const ROLE_ACCESS: Record<string, Record<Feature, boolean>> = {
     [Feature.PRIORITY_SUPPORT]: false,
     [Feature.BULK_OPERATIONS]: false,
   },
+
   SUPER_ADMIN: {
     // Super admins have access to everything
     [Feature.PRODUCTS_MANAGEMENT]: true,
@@ -265,5 +267,6 @@ export function getPlanLimit(
   const planLimits =
     PLAN_LIMITS[user.planType as keyof typeof PLAN_LIMITS] ||
     PLAN_LIMITS.STANDARD;
+
   return planLimits[limit];
 }

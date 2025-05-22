@@ -121,7 +121,7 @@ export default function ProductFilters({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search products..."
-              className="pl-10 max-w-sm text-gray-800"
+              className="pl-10 max-w-sm text-gray-200"
             />
             {searchTerm && (
               <button
@@ -140,7 +140,7 @@ export default function ProductFilters({
               value={selectedCategory}
               onValueChange={setSelectedCategory}
             >
-              <SelectTrigger className="text-gray-800">
+              <SelectTrigger className="text-gray-200">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>

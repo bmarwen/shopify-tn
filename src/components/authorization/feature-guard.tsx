@@ -1,4 +1,3 @@
-// src/components/authorization/feature-guard.tsx
 "use client";
 
 import { ReactNode } from "react";
@@ -7,7 +6,8 @@ import { Feature, hasFeatureAccess } from "@/lib/feature-authorization";
 
 interface FeatureGuardProps {
   /**
-   * The feature(s) to check - can be a single feature or an array of features
+   * The feature(s) to check
+   * - Can be a single feature or an array of features
    * - If array, requires access to ALL features (AND logic)
    */
   feature: Feature | Feature[];
@@ -102,14 +102,14 @@ export function RoleGuard({
  * Example usage:
  *
  * <FeatureGuard feature={Feature.INVOICE_GENERATION}>
- *   <InvoiceGenerationButton />
+ *   <InvoiceGenerationButton/>
  * </FeatureGuard>
  *
  * <PlanGuard plan="PREMIUM">
- *   <PremiumFeature />
+ *   <PremiumFeature/>
  * </PlanGuard>
  *
  * <RoleGuard role={["SHOP_ADMIN", "SUPER_ADMIN"]}>
- *   <AdminControls />
+ *   <AdminControls/>
  * </RoleGuard>
  */

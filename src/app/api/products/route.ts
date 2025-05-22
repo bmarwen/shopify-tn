@@ -1,4 +1,3 @@
-// src/app/api/products/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
@@ -7,17 +6,16 @@ import { shopService } from "@/lib/services/shop.service";
 import { slugify } from "@/lib/utils";
 import { db } from "@/lib/prisma";
 import { serializeBigInt } from "@/lib/serializer";
+import { s3ImageService } from "@/lib/services/s3-image.service";
 
 // GET products with filtering, sorting, and pagination
 export async function GET(req: NextRequest) {
   try {
     // Check authentication
     const session = await getServerSession(authOptions);
-
     if (!session || !session.user.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     const shopId = session.user.shopId;
 
     // Verify shop exists
@@ -76,6 +74,30 @@ export async function GET(req: NextRequest) {
       sort
     );
 
+    // Process S3 image URLs for each product
+    const productsWithImageUrls = await Promise.all(
+      products.map(async (product) => {
+        // Process product image URLs if they're S3 keys
+        if (product.images && product.images.length > 0) {
+          const processedImages = await Promise.all(
+            product.images.map(async (image) => {
+              if (s3ImageService.isS3Key(image)) {
+                try {
+                  return await s3ImageService.getImageUrl(image);
+                } catch (error) {
+                  console.error(`Error getting image URL for ${image}:`, error);
+                  return image; // Return original key if URL generation fails
+                }
+              }
+              return image; // Return original URL if not an S3 key
+            })
+          );
+          return { ...product, images: processedImages };
+        }
+        return product;
+      })
+    );
+
     // Get product statistics
     const productStats = await productsService.getProductStats(
       shopId,
@@ -84,7 +106,7 @@ export async function GET(req: NextRequest) {
 
     // Serialize data to handle BigInt values
     const responseData = serializeBigInt({
-      products,
+      products: productsWithImageUrls,
       pagination: {
         total: totalProducts,
         page,
@@ -113,7 +135,6 @@ export async function POST(req: NextRequest) {
   try {
     // Check authentication
     const session = await getServerSession(authOptions);
-
     if (
       !session ||
       !session.user.shopId ||
@@ -121,12 +142,10 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     const shopId = session.user.shopId;
 
     // Parse the request body
     const body = await req.json();
-
     const {
       name,
       slug,
@@ -165,7 +184,6 @@ export async function POST(req: NextRequest) {
         },
       },
     });
-
     if (existingProduct) {
       return NextResponse.json(
         { error: "A product with this slug already exists" },
@@ -177,13 +195,11 @@ export async function POST(req: NextRequest) {
     const shopSettings = await db.shopSettings.findUnique({
       where: { shopId },
     });
-
     const lowStockThreshold = shopSettings?.lowStockThreshold || 5;
     const lowStockAlert = inventory <= lowStockThreshold;
 
     // Process custom fields - validate they exist for this shop
     const customFieldsData = [];
-
     if (customFields && customFields.length > 0) {
       for (const cf of customFields) {
         // Look up the custom field in the database to ensure it exists
@@ -193,7 +209,6 @@ export async function POST(req: NextRequest) {
             name: cf.key,
           },
         });
-
         // If it doesn't exist, create it
         if (!customField) {
           customField = await db.customField.create({
@@ -205,11 +220,35 @@ export async function POST(req: NextRequest) {
             },
           });
         }
-
         customFieldsData.push({
           customFieldId: customField.id,
           value: cf.value,
         });
+      }
+    }
+
+    // Process images - upload base64 data URLs to S3
+    const processedImages = [];
+    if (images && images.length > 0) {
+      for (const image of images) {
+        if (image && image.startsWith("data:")) {
+          try {
+            // Upload image to S3
+            const fileNameBase = `${productSlug}-${Date.now()}`; // Add timestamp to avoid collisions
+            const uploadResult = await s3ImageService.uploadImage(
+              image,
+              `${fileNameBase}.jpg`,
+              "products"
+            );
+            processedImages.push(uploadResult.key); // Store S3 key
+          } catch (uploadError) {
+            console.error("Error uploading product image to S3:", uploadError);
+            // Skip this image if upload fails
+          }
+        } else {
+          // Keep existing image URLs or keys
+          processedImages.push(image);
+        }
       }
     }
 
@@ -229,7 +268,7 @@ export async function POST(req: NextRequest) {
           tva: tva || 19, // Default TVA to 19% if not provided
           lowStockAlert,
           weight,
-          images: images || [],
+          images: processedImages, // Use processed image array
           expiryDate: expiryDate ? new Date(expiryDate) : null,
           shopId,
           categories: {
@@ -287,8 +326,36 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Generate image URLs for S3 keys in the response
+    let responseProduct = completeProduct;
+    if (
+      completeProduct &&
+      completeProduct.images &&
+      completeProduct.images.length > 0
+    ) {
+      const imageUrls = await Promise.all(
+        completeProduct.images.map(async (image) => {
+          if (s3ImageService.isS3Key(image)) {
+            try {
+              return await s3ImageService.getImageUrl(image);
+            } catch (error) {
+              console.error(`Error getting image URL for ${image}:`, error);
+              return image; // Return original key if URL generation fails
+            }
+          }
+          return image; // Return original URL if not an S3 key
+        })
+      );
+
+      responseProduct = {
+        ...completeProduct,
+        images: imageUrls,
+        s3Keys: completeProduct.images, // Keep original keys for reference
+      };
+    }
+
     // Serialize the response
-    return NextResponse.json(serializeBigInt(completeProduct), { status: 201 });
+    return NextResponse.json(serializeBigInt(responseProduct), { status: 201 });
   } catch (error) {
     console.error("Error creating product:", error);
     return NextResponse.json(

@@ -17,24 +17,28 @@ import { Plus } from "lucide-react";
 import DiscountListActions from "@/components/admin/discount-list-actions";
 import Pagination from "@/components/admin/pagination";
 
+interface DiscountsPageProps {
+  searchParams: {
+    [key: string]: string | string[] | undefined;
+  };
+}
+
 export default async function DiscountsPage({
   searchParams,
-}: {
-  searchParams: { page?: string; perPage?: string; product?: string };
-}) {
+}: DiscountsPageProps) {
   // Check authentication
   const session = await getServerSession(authOptions);
-
   if (!session?.user?.shopId) {
     redirect("/login?callbackUrl=/admin/discounts");
   }
-
   const shopId = session.user.shopId;
 
-  // Parse pagination params
-  const page = parseInt(searchParams.page || "1");
-  const perPage = parseInt(searchParams.perPage || "10");
-  const productId = searchParams.product;
+  // Parse pagination params safely
+  const page = parseInt(String(searchParams.page) || "1");
+  const perPage = parseInt(String(searchParams.perPage) || "10");
+  const productId = searchParams.product
+    ? String(searchParams.product)
+    : undefined;
 
   // Build where clause for filtering
   const where: any = {
@@ -208,7 +212,7 @@ export default async function DiscountsPage({
         </Table>
       </div>
 
-      {/* Pagination using client component */}
+      {/* Pagination */}
       <Pagination
         currentPage={page}
         totalPages={totalPages}

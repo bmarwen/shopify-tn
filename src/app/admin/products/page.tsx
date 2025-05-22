@@ -34,15 +34,16 @@ import {
   Tag,
   ShoppingBag,
   Loader2,
+  ImageIcon,
 } from "lucide-react";
 import ProductListActions from "@/components/admin/product-list-actions";
-import ProductPagination from "@/components/admin/product-pagination";
 import ProductFilters from "@/components/admin/product-filters";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/components/ui/use-toast";
+import Pagination from "@/components/admin/pagination";
 
-// Define type for Product and category
+// Define types for Product and category
 interface Category {
   id: string;
   name: string;
@@ -131,12 +132,10 @@ export default function ProductsPage() {
     if (prevSearchParamsRef.current === currentSearchParams) {
       return;
     }
-
     setFetchAttempted(true);
 
     const fetchData = async () => {
       setIsLoading(true);
-
       try {
         // Fetch categories only once
         if (categories.length === 0) {
@@ -219,7 +218,7 @@ export default function ProductsPage() {
             Products
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage your products, inventory, and categories
+            Manage your products and inventory
           </p>
         </div>
         <div className="flex gap-2">
@@ -254,7 +253,7 @@ export default function ProductsPage() {
               <DropdownMenuLabel>View</DropdownMenuLabel>
               <DropdownMenuItem asChild>
                 <Link
-                  href={`/admin/products?view=list${searchParams
+                  href={`/admin/products?view=list&${searchParams
                     .toString()
                     .replace(/^\?/, "&")
                     .replace(/view=[^&]*&?/, "")}`}
@@ -266,7 +265,7 @@ export default function ProductsPage() {
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link
-                  href={`/admin/products?view=grid${searchParams
+                  href={`/admin/products?view=grid&${searchParams
                     .toString()
                     .replace(/^\?/, "&")
                     .replace(/view=[^&]*&?/, "")}`}
@@ -278,7 +277,6 @@ export default function ProductsPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
           <Link href="/admin/products/new">
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -296,14 +294,12 @@ export default function ProductsPage() {
             {totalProducts}
           </div>
         </div>
-
         <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
           <div className="text-sm text-gray-500">Total Inventory</div>
           <div className="text-2xl font-bold text-gray-800 mt-1">
             {productStats.totalInventory || 0} units
           </div>
         </div>
-
         <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
           <div className="text-sm text-gray-500">Inventory Status</div>
           <div className="flex gap-2 mt-1">
@@ -387,13 +383,19 @@ export default function ProductsPage() {
                           <div className="flex items-center space-x-3">
                             <div className="flex-shrink-0 h-10 w-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
                               {product.images && product.images[0] ? (
-                                <Image
-                                  src={product.images[0]}
-                                  alt={product.name}
-                                  width={40}
-                                  height={40}
-                                  className="object-cover"
-                                />
+                                <div className="relative h-full w-full">
+                                  <Image
+                                    src={product.images[0]}
+                                    alt={product.name}
+                                    width={40}
+                                    height={40}
+                                    className="object-cover"
+                                    unoptimized
+                                    onError={(e) =>
+                                      (e.currentTarget.src = "/placeholder.jpg")
+                                    }
+                                  />
+                                </div>
                               ) : (
                                 <div className="text-gray-400 text-xs">
                                   No image
@@ -419,11 +421,8 @@ export default function ProductsPage() {
                           {formatCurrency(product.price)}
                           {product.discounts &&
                             product.discounts.length > 0 && (
-                              <div className="text-xs text-gray-500 line-through">
-                                {formatCurrency(
-                                  product.price *
-                                    (1 + product.discounts[0].percentage / 100)
-                                )}
+                              <div className="text-xs text-green-500">
+                                {product.discounts[0].percentage}% OFF
                               </div>
                             )}
                         </TableCell>
@@ -522,17 +521,27 @@ export default function ProductsPage() {
                         <TableCell>
                           {product._count && product._count.orderItems > 0 ? (
                             <div className="flex items-center">
-                              <ShoppingBag className="h-3 w-3 text-blue-600 mr-1" />
-                              <span className="text-blue-600">
-                                {product._count.orderItems}
-                              </span>
+                              <Link
+                                href={`/admin/orders?product=${product.id}`}
+                                className="flex items-center text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                <ShoppingBag className="h-3 w-3 mr-1" />
+                                <span>{product._count.orderItems}</span>
+                              </Link>
                             </div>
                           ) : (
                             <span className="text-gray-400 text-xs">None</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <ProductListActions productId={product.id} />
+                          <ProductListActions
+                            productId={product.id}
+                            onDelete={() => {
+                              setProducts((prev) =>
+                                prev.filter((p) => p.id !== product.id)
+                              );
+                            }}
+                          />
                         </TableCell>
                       </TableRow>
                     ))
@@ -563,15 +572,18 @@ export default function ProductsPage() {
                   <Card key={product.id} className="overflow-hidden">
                     <div className="h-48 bg-gray-100 relative">
                       {product.images && product.images[0] ? (
-                        <Image
-                          src={product.images[0]}
-                          alt={product.name}
-                          fill
-                          className="object-cover"
-                        />
+                        <div className="relative h-full w-full">
+                          <Image
+                            src={product.images[0]}
+                            alt={product.name}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        </div>
                       ) : (
                         <div className="flex items-center justify-center h-full text-gray-400">
-                          No image
+                          <ImageIcon className="h-12 w-12 opacity-20" />
                         </div>
                       )}
 
@@ -603,7 +615,6 @@ export default function ProductsPage() {
                         )}
                       </div>
                     </div>
-
                     <CardContent className="p-4">
                       <h3 className="font-medium text-gray-800 mb-1 truncate">
                         <Link
@@ -613,7 +624,6 @@ export default function ProductsPage() {
                           {product.name}
                         </Link>
                       </h3>
-
                       <div className="flex justify-between items-center mb-2">
                         <div className="text-gray-700 font-medium">
                           {formatCurrency(product.price)}
@@ -651,15 +661,25 @@ export default function ProductsPage() {
                       <div className="mt-4 flex justify-between items-center">
                         <span className="text-xs text-gray-500">
                           {product._count && product._count.orderItems > 0 ? (
-                            <span className="flex items-center">
+                            <Link
+                              href={`/admin/orders?product=${product.id}`}
+                              className="flex items-center text-gray-600 hover:text-indigo-600 hover:underline"
+                            >
                               <ShoppingBag className="h-3 w-3 mr-1" />
                               {product._count.orderItems} orders
-                            </span>
+                            </Link>
                           ) : (
                             "No orders"
                           )}
                         </span>
-                        <ProductListActions productId={product.id} />
+                        <ProductListActions
+                          productId={product.id}
+                          onDelete={() => {
+                            setProducts((prev) =>
+                              prev.filter((p) => p.id !== product.id)
+                            );
+                          }}
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -668,7 +688,7 @@ export default function ProductsPage() {
             </div>
           )}
 
-          <ProductPagination
+          <Pagination
             currentPage={page}
             totalPages={totalPages}
             totalItems={totalProducts}
