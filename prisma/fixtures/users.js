@@ -1,5 +1,5 @@
 // prisma/fixtures/users.js
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 async function run(prisma) {
   // Get the shop
@@ -11,8 +11,12 @@ async function run(prisma) {
     throw new Error("Shop not found. Run shop fixtures first.");
   }
 
-  // Clear existing data
-  await prisma.user.deleteMany({});
+  try {
+    await prisma.user.deleteMany({});
+  } catch (error) {
+    console.warn("⚠️ Warning: Failed to delete existing users. Continuing...");
+    console.error(error);
+  }
 
   // Create admin user
   const adminPassword = await bcrypt.hash("admin123", 10);

@@ -1,5 +1,5 @@
 // prisma/fixtures/advancedShop.js
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 function slugify(text) {
   return text

@@ -21,8 +21,15 @@ async function run(prisma) {
   }
 
   // Clear existing products
-  await prisma.productVariant.deleteMany({});
-  await prisma.product.deleteMany({});
+  try {
+    await prisma.productVariant.deleteMany({});
+    await prisma.product.deleteMany({});
+  } catch (error) {
+    console.warn("⚠️ Warning: Failed to delete existing products and products variants. Continuing...");
+    console.error(error);
+  }
+
+
 
   // Helper to find category by name
   const getCategoryByName = (name) => categories.find((c) => c.name === name);

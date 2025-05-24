@@ -365,7 +365,7 @@ export default async function OrderDetailsPage({
                 <div className="flex items-center">
                   <Truck className="h-4 w-4 mr-2 text-gray-500" />
                   <CardTitle className="text-base text-gray-800">
-                    <span className="text-gray-200">Shipping Address</span>
+                    <span className="text-gray-700">Shipping Address</span>
                   </CardTitle>
                 </div>
               </CardHeader>

@@ -11,8 +11,13 @@ async function run(prisma) {
     throw new Error("Shop not found. Run shop fixtures first.");
   }
 
-  // Clear existing data
-  await prisma.category.deleteMany({});
+  try {
+    await prisma.category.deleteMany({});
+  } catch (error) {
+    console.warn("⚠️ Warning: Failed to delete existing categories. Continuing...");
+    console.error(error);
+  }
+
 
   // Define categories
   const categoriesData = [

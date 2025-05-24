@@ -38,8 +38,14 @@ async function run(prisma) {
     }
 
     // Clear existing data
-    await prisma.subscriptionPayment.deleteMany({});
-    await prisma.subscription.deleteMany({});
+    try {
+      await prisma.subscriptionPayment.deleteMany({});
+      await prisma.subscription.deleteMany({});
+    } catch (error) {
+      console.warn("⚠️ Warning: Failed to delete existing subsPayment and subs. Continuing...");
+      console.error(error);
+    }
+
 
     // Create an active subscription for the current shop
     const now = new Date();

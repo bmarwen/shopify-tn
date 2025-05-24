@@ -43,8 +43,13 @@ async function run(prisma) {
   }
 
   // Clear existing orders
-  await prisma.orderItem.deleteMany({});
-  await prisma.order.deleteMany({});
+  try {
+    await prisma.orderItem.deleteMany({});
+    await prisma.order.deleteMany({});
+  } catch (error) {
+    console.warn("⚠️ Warning: Failed to delete existing orders. Continuing...");
+    console.error(error);
+  }
 
   // Generate random orders
   const orderStatuses = [

@@ -3,7 +3,13 @@ const { PlanType } = require("@prisma/client");
 
 async function run(prisma) {
   // Clear existing data
-  await prisma.shop.deleteMany({});
+  try {
+    await prisma.shop.deleteMany({});
+  } catch (error) {
+    console.warn("⚠️ Warning: Failed to delete existing shops. Continuing...");
+    console.error(error);
+  }
+
 
   // Create shop
   const shop = await prisma.shop.create({

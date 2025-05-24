@@ -124,6 +124,7 @@ export default function OrderFilters({ currentFilters }: OrderFiltersProps) {
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, selectedStatus, selectedPaymentStatus, dateFrom, dateTo]);
 
   // Clear all filters
