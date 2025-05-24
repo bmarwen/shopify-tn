@@ -80,46 +80,173 @@ clean:
 	rm -rf .next
 	rm -rf node_modules/.cache
 
-# Extract code to text files
+
+
+######################################################################
+######################################################################
+######################################################################
+###################  EXTRACT CODE FOR CLAUDE  ########################
+######################################################################
+######################################################################
+
+
+# Original full extract (keep working)
 .PHONY: extract-code
 extract-code:
-	# Remove existing files
 	rm -f all_texts.txt file_list.txt
-
-	# Find essential files, excluding build artifacts and unnecessary files
-	find . \( \
-		-path "*/src/*" -o \
-		-path "*/prisma_/*" \
-	\) -type f \
-	! -path "*/.next/*" \
-	! -path "*/.history/*" \
-	! -path "*/node_modules/*" \
-	! -path "*/public/*" \
-	! -path "*/.git/*" \
-	! -name "*.ico" \
-	! -name "*.json" \
-	! -name "*.log" \
-	! -name "*.gitkeep" \
-	! -name "*.d.ts" \
-	! -name "*.node" \
-	! -name "*.map" \
-	! -name "*.test.*" \
-	! -name "*.spec.*" \
-	> file_list.txt
-
-	# Create all_texts.txt with file contents
-	@bash -c 'while read -r file; do \
-		echo "File: $$file" >> all_texts.txt; \
-		cat "$$file" >> all_texts.txt; \
-		echo "" >> all_texts.txt; \
-	done < file_list.txt'
-
-	# Append essential directory structure
+	find . \( -path "*/src/*" -o -path "*/prisma_/*" \) -type f \
+		! -path "*/.next/*" ! -path "*/.history/*" ! -path "*/node_modules/*" \
+		! -path "*/public/*" ! -path "*/.git/*" ! -name "*.ico" ! -name "*.json" \
+		! -name "*.log" ! -name "*.gitkeep" ! -name "*.d.ts" ! -name "*.node" \
+		! -name "*.map" ! -name "*.test.*" ! -name "*.spec.*" > file_list.txt
+	@bash -c 'while read -r file; do echo "File: $$file" >> all_texts.txt; cat "$$file" >> all_texts.txt; echo "" >> all_texts.txt; done < file_list.txt'
 	echo "Directory Structure:" >> all_texts.txt
-	tree -I '.next|.history|node_modules|dist|coverage|.turbo|.cache|*.ico|*.json|*.log|*.gitkeep|*.d.ts|*.node|*.map|*.test.*|*.spec.*' \
-		--dirsfirst -a >> all_texts.txt
+	tree -I '.next|.history|node_modules|dist|coverage|.turbo|.cache|*.ico|*.json|*.log|*.gitkeep|*.d.ts|*.node|*.map|*.test.*|*.spec.*' --dirsfirst -a >> all_texts.txt
 
+# Medium extract using simple commands
+.PHONY: extract-code-medium
+extract-code-medium:
+	rm -f code_medium.txt file_list_medium.txt
+	find . \( -path "*/src/*" -o -path "*/prisma_/*" -o -path "*/prisma/schema.prisma" \) -type f \
+		\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.prisma" \) \
+		! -path "*/.next/*" ! -path "*/.history/*" ! -path "*/node_modules/*" \
+		! -path "*/public/*" ! -path "*/.git/*" ! -name "*.test.*" \
+		! -name "*.spec.*" ! -name "*.stories.*" > file_list_medium.txt
+	echo "=== MEDIUM CODE EXTRACT ===" > code_medium.txt
+	echo "Files: $(cat file_list_medium.txt | wc -l)" >> code_medium.txt
+	echo "Generated: $(date)" >> code_medium.txt
+	echo "" >> code_medium.txt
+	./process_medium.sh
+	rm -f file_list_medium.txt
+	@echo "Medium extract created: code_medium.txt"
+	@echo "Size: $(du -h code_medium.txt | cut -f1)"
 
+# Compact extract using external script
+.PHONY: extract-code-compact
+extract-code-compact:
+	rm -f code_compact.txt file_list_compact.txt
+	find . \( -path "*/src/*" -o -path "*/prisma_/*" -o -path "*/prisma/schema.prisma" \) -type f \
+		\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.prisma" \) \
+		! -path "*/.next/*" ! -path "*/.history/*" ! -path "*/node_modules/*" \
+		! -path "*/public/*" ! -path "*/.git/*" ! -name "*.test.*" \
+		! -name "*.spec.*" ! -name "*.stories.*" > file_list_compact.txt
+	echo "=== COMPACT CODE EXTRACT ===" > code_compact.txt
+	echo "Files: $(cat file_list_compact.txt | wc -l)" >> code_compact.txt
+	echo "Generated: $(date)" >> code_compact.txt
+	echo "" >> code_compact.txt
+	./process_compact.sh
+	rm -f file_list_compact.txt
+	@echo "Compact extract created: code_compact.txt"
+	@echo "Size: $(du -h code_compact.txt | cut -f1)"
+
+# Just signatures (minimal)
+.PHONY: extract-code-signatures
+extract-code-signatures:
+	rm -f code_signatures.txt file_list_signatures.txt
+	find . \( -path "*/src/*" -o -path "*/prisma_/*" \) -type f \
+		\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.prisma" \) \
+		! -path "*/.next/*" ! -path "*/.history/*" ! -path "*/node_modules/*" \
+		! -path "*/public/*" ! -path "*/.git/*" ! -name "*.test.*" \
+		! -name "*.spec.*" ! -name "*.stories.*" > file_list_signatures.txt
+	echo "=== SIGNATURES ONLY EXTRACT ===" > code_signatures.txt
+	echo "Files: $$(cat file_list_signatures.txt | wc -l)" >> code_signatures.txt
+	echo "Generated: $$(date)" >> code_signatures.txt
+	echo "" >> code_signatures.txt
+	./process_signatures.sh
+	rm -f file_list_signatures.txt
+	@echo "Signatures extract created: code_signatures.txt"
+	@echo "Size: $$(du -h code_signatures.txt | cut -f1)"
+
+# Create zip archive
+.PHONY: create-code-zip
+create-code-zip:
+	rm -f code_archive.zip
+	mkdir -p temp_code_archive
+	# Include Prisma schema specifically
+	find . \( -path "*/src/*" -o -path "*/prisma_/*" -o -path "*/prisma/schema.prisma" \) -type f \
+		\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.prisma" \) \
+		! -path "*/.next/*" ! -path "*/.history/*" ! -path "*/node_modules/*" \
+		! -path "*/public/*" ! -path "*/.git/*" ! -name "*.test.*" \
+		! -name "*.spec.*" -exec cp --parents {} temp_code_archive/ \;
+	# Add essential config files
+	find . -maxdepth 2 -name "package.json" -o -name "tsconfig.json" -o -name "next.config.*" -o -name "tailwind.config.*" | \
+		head -5 | xargs -I {} cp --parents {} temp_code_archive/ 2>/dev/null || true
+	# Create comprehensive project overview
+	echo "Project Overview - $(date)" > temp_code_archive/PROJECT_INFO.txt
+	echo "Generated by: make create-code-zip" >> temp_code_archive/PROJECT_INFO.txt
+	echo "" >> temp_code_archive/PROJECT_INFO.txt
+	echo "=== DIRECTORY STRUCTURE ===" >> temp_code_archive/PROJECT_INFO.txt
+	find temp_code_archive -type f | sort >> temp_code_archive/PROJECT_INFO.txt
+	echo "" >> temp_code_archive/PROJECT_INFO.txt
+	echo "=== DATABASE SCHEMA PREVIEW ===" >> temp_code_archive/PROJECT_INFO.txt
+	[ -f "prisma/schema.prisma" ] && head -50 prisma/schema.prisma >> temp_code_archive/PROJECT_INFO.txt || echo "No schema.prisma found" >> temp_code_archive/PROJECT_INFO.txt
+	# Create zip
+	cd temp_code_archive && zip -r ../code_archive.zip .
+	rm -rf temp_code_archive
+	@echo "Code archive created: code_archive.zip"
+	@echo "Archive size: $(du -h code_archive.zip | cut -f1)"
+	@echo "Contents: Source code + Prisma schema + Config files"
+
+# Utilities
+.PHONY: preview-files
+preview-files:
+	@echo "Files that will be included:"
+	@echo "============================"
+	@find . \( -path "*/src/*" -o -path "*/prisma_/*" -o -path "*/prisma/schema.prisma" \) -type f \
+		\( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.prisma" \) \
+		! -path "*/.next/*" ! -path "*/.history/*" ! -path "*/node_modules/*" \
+		! -path "*/public/*" ! -path "*/.git/*" ! -name "*.test.*" \
+		! -name "*.spec.*" ! -name "*.stories.*" | head -20
+	@echo ""
+	@echo "Total files: $(find . \( -path \"*/src/*\" -o -path \"*/prisma_/*\" -o -path \"*/prisma/schema.prisma\" \) -type f \( -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.js\" -o -name \"*.jsx\" -o -name \"*.prisma\" \) ! -path \"*/.next/*\" ! -path \"*/.history/*\" ! -path \"*/node_modules/*\" ! -path \"*/public/*\" ! -path \"*/.git/*\" ! -name \"*.test.*\" ! -name \"*.spec.*\" ! -name \"*.stories.*\" | wc -l)"
+	@echo ""
+	@[ -f "prisma/schema.prisma" ] && echo "✓ Database schema will be included" || echo "⚠ No prisma/schema.prisma found"
+
+.PHONY: show-sizes
+show-sizes:
+	@echo "File size comparison:"
+	@[ -f all_texts.txt ] && echo "Full: $$(du -h all_texts.txt | cut -f1)" || echo "Full: Not created"
+	@[ -f code_medium.txt ] && echo "Medium: $$(du -h code_medium.txt | cut -f1)" || echo "Medium: Not created"
+	@[ -f code_compact.txt ] && echo "Compact: $$(du -h code_compact.txt | cut -f1)" || echo "Compact: Not created"
+	@[ -f code_signatures.txt ] && echo "Signatures: $$(du -h code_signatures.txt | cut -f1)" || echo "Signatures: Not created"
+	@[ -f code_archive.zip ] && echo "Zip: $$(du -h code_archive.zip | cut -f1)" || echo "Zip: Not created"
+
+.PHONY: clean-extracts
+clean-extracts:
+	rm -f all_texts.txt file_list.txt code_medium.txt file_list_medium.txt 
+	rm -f code_compact.txt file_list_compact.txt code_signatures.txt file_list_signatures.txt 
+	rm -f code_archive.zip
+	rm -rf temp_code_archive
+	@echo "All extract files cleaned"
+
+.PHONY: help-extract
+help-extract:
+	@echo "Commands:"
+	@echo "========================================="
+	@echo "extract-code-medium     - Code without comments (recommended for AI)"
+	@echo "create-code-zip         - Zip archive (BEST for sharing with AI)"
+	@echo "extract-code-compact    - Smart selection of important parts"
+	@echo "extract-code-signatures - Just imports/exports/types"
+	@echo "show-sizes             - Compare file sizes"
+	@echo "preview-files          - See what will be included"
+	@echo "clean-extracts         - Clean up all generated files"
+	@echo ""
+	@echo "🚀 RECOMMENDED WORKFLOW:"
+	@echo "1. make create-code-zip    (Best for sharing - includes schema)"
+	@echo "2. make extract-code-medium (If you prefer text files)"
+	@echo ""
+	@echo "📊 The zip includes:"
+	@echo "  • All source code (src/)"
+	@echo "  • Database schema (prisma/schema.prisma)"
+	@echo "  • Config files (package.json, tsconfig.json, etc.)"
+	@echo "  • Project overview with schema preview"
+
+######################################################################
+######################################################################
+######################################################################
+###################  END OF EXTRACT CODE FOR CLAUDE  #################
+######################################################################
+######################################################################
 
 # Start both the database and application USED
 .PHONY: start-all 

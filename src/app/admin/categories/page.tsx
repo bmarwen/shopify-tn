@@ -6,13 +6,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Table,
   TableHeader,
   TableHead,
@@ -33,7 +26,6 @@ import {
 import CategoryForm from "@/components/admin/category-form";
 import { formatDate } from "@/lib/utils";
 import {
-  Layers,
   Search,
   X,
   ChevronRight,
@@ -69,7 +61,6 @@ interface HierarchicalCategory extends Category {
 export default function CategoriesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [hierarchicalCategories, setHierarchicalCategories] = useState<
@@ -305,7 +296,7 @@ export default function CategoriesPage() {
                   </div>
                 )}
 
-                <div className="flex items-center z-10 bg-white">
+                <div className="flex items-center z-10 bg-white rounded">
                   {/* Always reserve space for the expand/collapse control for consistent alignment */}
                   {hasChildren ? (
                     <button
@@ -330,7 +321,7 @@ export default function CategoriesPage() {
                       hasChildren ? "text-indigo-500" : "text-gray-500"
                     }`}
                   />
-                  <span className="font-medium text-gray-800">
+                  <span className="font-medium text-gray-800 mr-4">
                     {category.name}
                   </span>
                 </div>

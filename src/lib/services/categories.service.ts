@@ -34,7 +34,7 @@ export const categoriesService = {
     // Function to create flat array with correct level
     const createFlatCategoriesWithLevels = (categories: any[]) => {
       // First get all root categories (those with no parent)
-      let result = addLevelToCategories(categories);
+      const result = addLevelToCategories(categories);
 
       // For each root category, recursively add its children
       for (let i = 0; i < result.length; i++) {
@@ -384,7 +384,7 @@ export const categoriesService = {
       // Assign levels based on parent relationships
       const result = categories.map((category) => {
         let level = 0;
-        let current = category;
+        const current = category;
         let parentId = current.parentId;
 
         // Navigate up the tree to determine level

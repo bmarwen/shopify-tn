@@ -29,9 +29,9 @@ import { Loader2 } from "lucide-react";
 // Order status options
 const orderStatuses = [
   { value: "PENDING", label: "Pending" },
-  { value: "PROCESSING", label: "Processing" },
   { value: "SHIPPED", label: "Shipped" },
   { value: "DELIVERED", label: "Delivered" },
+  { value: "RETURNED", label: "Returned" },
   { value: "CANCELLED", label: "Cancelled" },
   { value: "REFUNDED", label: "Refunded" },
 ];
@@ -39,26 +39,15 @@ const orderStatuses = [
 // Payment status options
 const paymentStatuses = [
   { value: "PENDING", label: "Pending" },
-  { value: "PAID", label: "Paid" },
   { value: "FAILED", label: "Failed" },
   { value: "REFUNDED", label: "Refunded" },
-  { value: "PARTIALLY_REFUNDED", label: "Partially Refunded" },
-];
-
-// Shipping status options
-const shippingStatuses = [
-  { value: "PENDING", label: "Pending" },
-  { value: "PROCESSING", label: "Processing" },
-  { value: "SHIPPED", label: "Shipped" },
-  { value: "DELIVERED", label: "Delivered" },
-  { value: "RETURNED", label: "Returned" },
+  { value: "COMPLETED", label: "Completed" },
 ];
 
 // Form schema
 const formSchema = z.object({
   status: z.string().min(1, "Order status is required"),
   paymentStatus: z.string().min(1, "Payment status is required"),
-  shippingStatus: z.string().min(1, "Shipping status is required"),
   notes: z.string().optional(),
 });
 
@@ -68,14 +57,12 @@ interface OrderStatusUpdateFormProps {
   orderId: string;
   currentStatus: string;
   currentPaymentStatus: string;
-  currentShippingStatus: string;
 }
 
 export default function OrderStatusUpdateForm({
   orderId,
   currentStatus,
   currentPaymentStatus,
-  currentShippingStatus,
 }: OrderStatusUpdateFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -87,7 +74,6 @@ export default function OrderStatusUpdateForm({
     defaultValues: {
       status: currentStatus,
       paymentStatus: currentPaymentStatus,
-      shippingStatus: currentShippingStatus || "PENDING",
       notes: "",
     },
   });
@@ -140,14 +126,14 @@ export default function OrderStatusUpdateForm({
             name="status"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-gray-700">Order Status</FormLabel>
+                <FormLabel className="text-gray-300">Order Status</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   defaultValue={field.value}
                   disabled={isSubmitting}
                 >
                   <FormControl>
-                    <SelectTrigger className="w-full border-gray-300 text-gray-800">
+                    <SelectTrigger className="w-full border-gray-300 text-gray-400">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                   </FormControl>
@@ -169,48 +155,19 @@ export default function OrderStatusUpdateForm({
             name="paymentStatus"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-gray-700">Payment Status</FormLabel>
+                <FormLabel className="text-gray-300">Payment Status</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   defaultValue={field.value}
                   disabled={isSubmitting}
                 >
                   <FormControl>
-                    <SelectTrigger className="w-full border-gray-300 text-gray-800">
+                    <SelectTrigger className="w-full border-gray-300 text-gray-400">
                       <SelectValue placeholder="Select payment status" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     {paymentStatuses.map((status) => (
-                      <SelectItem key={status.value} value={status.value}>
-                        {status.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="shippingStatus"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-gray-700">Shipping Status</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                  disabled={isSubmitting}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full border-gray-300 text-gray-800">
-                      <SelectValue placeholder="Select shipping status" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {shippingStatuses.map((status) => (
                       <SelectItem key={status.value} value={status.value}>
                         {status.label}
                       </SelectItem>
@@ -228,11 +185,11 @@ export default function OrderStatusUpdateForm({
           name="notes"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-gray-700">Notes (Optional)</FormLabel>
+              <FormLabel className="text-gray-300">Notes (Optional)</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Add a note about this status change (visible to admin only)"
-                  className="resize-none h-20 border-gray-300 text-gray-800"
+                  className="resize-none h-20 border-gray-300 text-gray-300"
                   {...field}
                   disabled={isSubmitting}
                 />

@@ -276,7 +276,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                   <TableCell className="font-medium text-gray-800">
                     <Link
                       href={`/admin/orders/${order.id}`}
-                      className="text-indigo-600 hover:underline font-medium"
+                      className="text-blue-600 hover:underline font-medium"
                     >
                       {order.orderNumber}
                     </Link>
@@ -287,7 +287,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                   <TableCell>
                     <Link
                       href={`/admin/customers/${order.userId}`}
-                      className="text-gray-200 hover:text-indigo-600 hover:underline font-medium"
+                      className="text-gray-200 hover:text-blue-300 hover:underline font-medium"
                     >
                       {order.user.name || "Unnamed Customer"}
                     </Link>

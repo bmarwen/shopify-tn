@@ -38,6 +38,10 @@ import {
   Banknote,
   FileText,
   ArrowLeft,
+  NotebookPen,
+  PackageCheck,
+  Notebook,
+  BookOpenText,
 } from "lucide-react";
 
 interface OrderDetailsPageProps {
@@ -117,19 +121,21 @@ export default async function OrderDetailsPage({
         <div className="md:col-span-2 space-y-6">
           {/* Order Items Card */}
           <Card>
-            <CardHeader className="bg-gray-50 border-b">
+            <CardHeader className="bg-gray-50 border-b rounded-t-md">
               <div className="flex justify-between items-center">
                 <CardTitle className="text-lg text-gray-800">
-                  <ShoppingBag className="h-4 w-4 inline-block mr-2" />
-                  Order Items ({totalItems})
+                  <ShoppingBag className="h-4 w-4 inline-block mr-2 text-gray-600" />
+                  <span className="text-gray-700">
+                    Order Items ({totalItems})
+                  </span>
                 </CardTitle>
-                <div className="text-sm text-gray-600">
+                <div className="text-md text-gray-700">
                   Total Quantity:{" "}
                   <span className="font-semibold">{totalQuantity}</span>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 bg-gray-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -255,13 +261,14 @@ export default async function OrderDetailsPage({
           {/* Order Notes */}
           {order.notes && (
             <Card>
-              <CardHeader className="bg-gray-50 border-b">
+              <CardHeader className="bg-gray-50 border-b rounded-t-md">
                 <CardTitle className="text-lg text-gray-800">
-                  Order Notes
+                  <NotebookPen className="h-4 w-4 inline-block mr-2 text-gray-600" />
+                  <span className="text-gray-700">Order Notes</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
-                <p className="text-gray-700 whitespace-pre-wrap">
+              <CardContent className="p-4 bg-gray-900">
+                <p className="text-gray-300 whitespace-pre-wrap">
                   {order.notes}
                 </p>
               </CardContent>
@@ -270,18 +277,18 @@ export default async function OrderDetailsPage({
 
           {/* Order Status Update Form */}
           <Card>
-            <CardHeader className="bg-gray-50 border-b">
+            <CardHeader className="bg-gray-50 border-b rounded-t-md">
               <CardTitle className="text-lg text-gray-800">
-                Update Order Status
+                <PackageCheck className="h-4 w-4 inline-block mr-2 text-gray-600" />
+                <span className="text-gray-700">Update Order Status</span>
               </CardTitle>
               <CardDescription>Change the status of this order</CardDescription>
             </CardHeader>
-            <CardContent className="p-4 pt-6">
+            <CardContent className="p-4 pt-6 bg-gray-900">
               <OrderStatusUpdateForm
                 orderId={order.id}
                 currentStatus={order.status}
                 currentPaymentStatus={order.paymentStatus}
-                currentShippingStatus={order.shippingStatus}
               />
             </CardContent>
           </Card>
@@ -291,37 +298,32 @@ export default async function OrderDetailsPage({
         <div className="space-y-6">
           {/* Order Summary Card */}
           <Card>
-            <CardHeader className="bg-gray-50 border-b">
+            <CardHeader className="bg-gray-50 border-b rounded-t-md">
               <CardTitle className="text-lg text-gray-800">
-                Order Summary
+                <BookOpenText className="h-4 w-4 inline-block mr-2 text-gray-600" />
+                <span className="text-gray-700">Order Summary</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 divide-y divide-gray-200">
-              <div className="py-3 flex justify-between">
-                <span className="text-gray-500">Status</span>
+            <CardContent className="p-4 divide-y divide-gray-200 bg-gray-900">
+              <div className="py-3 flex justify-between ">
+                <span className="text-gray-200">Status</span>
                 <OrderStatusBadge status={order.status} />
               </div>
               <div className="py-3 flex justify-between">
-                <span className="text-gray-500">Payment</span>
+                <span className="text-gray-200">Payment</span>
                 <OrderStatusBadge status={order.paymentStatus} type="payment" />
               </div>
+
               <div className="py-3 flex justify-between">
-                <span className="text-gray-500">Shipping</span>
-                <OrderStatusBadge
-                  status={order.shippingStatus || "PENDING"}
-                  type="shipping"
-                />
-              </div>
-              <div className="py-3 flex justify-between">
-                <span className="text-gray-500">Date Placed</span>
-                <span className="text-gray-700">
+                <span className="text-gray-200">Date Placed</span>
+                <span className="text-gray-300">
                   {formatDate(order.createdAt)}
                 </span>
               </div>
               {order.updatedAt && order.updatedAt !== order.createdAt && (
                 <div className="py-3 flex justify-between">
-                  <span className="text-gray-500">Last Updated</span>
-                  <span className="text-gray-700">
+                  <span className="text-gray-200">Last Updated</span>
+                  <span className="text-gray-300">
                     {formatDate(order.updatedAt)}
                   </span>
                 </div>
@@ -331,22 +333,22 @@ export default async function OrderDetailsPage({
 
           {/* Customer Info */}
           <Card>
-            <CardHeader className="bg-gray-50 border-b px-4 py-3">
+            <CardHeader className="bg-gray-50 border-b px-4 py-3 rounded-t-md">
               <div className="flex items-center">
                 <User className="h-4 w-4 mr-2 text-gray-500" />
                 <CardTitle className="text-base text-gray-800">
-                  Customer
+                  <span className="text-gray-700">Customer</span>
                 </CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="p-4 bg-gray-900">
               <div className="space-y-2">
-                <div className="font-medium text-gray-800">
+                <div className="font-medium text-gray-200">
                   {order.user.name || "Guest Customer"}
                 </div>
-                <div className="text-gray-600">{order.user.email}</div>
+                <div className="text-gray-400">{order.user.email}</div>
                 <div className="pt-2">
-                  <Button variant="outline" size="sm" asChild>
+                  <Button variant="outline" size="sm">
                     <Link href={`/admin/customers/${order.userId}`}>
                       View Customer
                     </Link>
@@ -359,16 +361,16 @@ export default async function OrderDetailsPage({
           {/* Shipping Address */}
           {order.address && (
             <Card>
-              <CardHeader className="bg-gray-50 border-b px-4 py-3">
+              <CardHeader className="bg-gray-50 border-b px-4 py-3 rounded-t-md">
                 <div className="flex items-center">
                   <Truck className="h-4 w-4 mr-2 text-gray-500" />
                   <CardTitle className="text-base text-gray-800">
-                    Shipping Address
+                    <span className="text-gray-200">Shipping Address</span>
                   </CardTitle>
                 </div>
               </CardHeader>
-              <CardContent className="p-4">
-                <div className="space-y-1 text-gray-700">
+              <CardContent className="p-4 bg-gray-900">
+                <div className="space-y-1 text-gray-400">
                   <div>{order.address.line1}</div>
                   {order.address.line2 && <div>{order.address.line2}</div>}
                   <div>
@@ -383,24 +385,24 @@ export default async function OrderDetailsPage({
 
           {/* Payment Info */}
           <Card>
-            <CardHeader className="bg-gray-50 border-b px-4 py-3">
+            <CardHeader className="bg-gray-50 border-b px-4 py-3 rounded-t-md">
               <div className="flex items-center">
                 <CreditCard className="h-4 w-4 mr-2 text-gray-500" />
                 <CardTitle className="text-base text-gray-800">
-                  Payment Info
+                  <span className="text-gray-700">Payment Info</span>
                 </CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="p-4 bg-gray-900">
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Payment Method</span>
-                  <span className="text-gray-800 font-medium">
-                    {order.paymentMethod || "Standard Payment"}
+                  <span className="text-gray-200">Payment Method</span>
+                  <span className="text-gray-300 font-medium">
+                    {order.paymentMethodType || "Standard Payment"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Payment Status</span>
+                  <span className="text-gray-200">Payment Status</span>
                   <OrderStatusBadge
                     status={order.paymentStatus}
                     type="payment"
@@ -408,8 +410,8 @@ export default async function OrderDetailsPage({
                 </div>
                 <Separator className="my-2" />
                 <div className="flex justify-between font-medium">
-                  <span className="text-gray-800">Total Paid</span>
-                  <span className="text-gray-800">
+                  <span className="text-gray-200">Total Paid</span>
+                  <span className="text-gray-300">
                     {formatCurrency(order.total)}
                   </span>
                 </div>
@@ -420,15 +422,15 @@ export default async function OrderDetailsPage({
           {/* Invoice Status - Only for Advanced/Premium plans */}
           <FeatureGuard feature={Feature.INVOICE_GENERATION}>
             <Card>
-              <CardHeader className="bg-gray-50 border-b px-4 py-3">
+              <CardHeader className="bg-gray-50 border-b px-4 py-3 rounded-t-md">
                 <div className="flex items-center">
                   <FileText className="h-4 w-4 mr-2 text-gray-500" />
                   <CardTitle className="text-base text-gray-800">
-                    Invoice
+                    <span className="text-gray-700">Invoice</span>
                   </CardTitle>
                 </div>
               </CardHeader>
-              <CardContent className="p-4">
+              <CardContent className="p-4 bg-gray-900">
                 {order.invoice ? (
                   <div className="space-y-3">
                     <div className="flex justify-between">

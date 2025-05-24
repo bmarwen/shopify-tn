@@ -44,7 +44,7 @@ export default async function NewProductPage() {
   // Function to create flat array with correct level
   const createFlatCategoriesWithLevels = (categories: any[]) => {
     // First get all root categories (those with no parent)
-    let result = addLevelToCategories(categories);
+    const result = addLevelToCategories(categories);
 
     // For each root category, recursively add its children
     for (let i = 0; i < result.length; i++) {

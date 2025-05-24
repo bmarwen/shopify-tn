@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     const order = searchParams.get("order") || "asc";
 
     // Build where clause
-    let where: any = { shopId };
+    const where: any = { shopId };
 
     if (search) {
       where.name = {

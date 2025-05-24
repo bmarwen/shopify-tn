@@ -276,7 +276,6 @@ export const ordersService = {
     data: {
       status?: string;
       paymentStatus?: string;
-      shippingStatus?: string;
       notes?: string;
     }
   ) {
@@ -290,7 +289,6 @@ export const ordersService = {
         id: true,
         status: true,
         paymentStatus: true,
-        shippingStatus: true,
         userId: true,
         orderNumber: true,
       },
@@ -324,22 +322,12 @@ export const ordersService = {
       throw new Error("Invalid payment status");
     }
 
-    if (
-      data.shippingStatus &&
-      !["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "RETURNED"].includes(
-        data.shippingStatus
-      )
-    ) {
-      throw new Error("Invalid shipping status");
-    }
-
     // Update the order
     const updatedOrder = await db.order.update({
       where: { id: orderId },
       data: {
         status: (data.status as any) || undefined,
         paymentStatus: (data.paymentStatus as any) || undefined,
-        shippingStatus: (data.shippingStatus as any) || undefined,
         notes: data.notes !== undefined ? data.notes : undefined,
         updatedAt: new Date(),
       },

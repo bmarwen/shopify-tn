@@ -49,19 +49,14 @@ async function run(prisma) {
   // Generate random orders
   const orderStatuses = [
     "PENDING",
-    "PROCESSING",
     "SHIPPED",
+    "RETURNED",
     "DELIVERED",
     "CANCELLED",
+    "REFUNDED",
   ];
+
   const paymentStatuses = ["PENDING", "COMPLETED", "FAILED", "REFUNDED"];
-  const shippingStatuses = [
-    "PENDING",
-    "PROCESSING",
-    "SHIPPED",
-    "DELIVERED",
-    "RETURNED",
-  ];
 
   // Create orders
   const orders = [];
@@ -139,7 +134,6 @@ async function run(prisma) {
         orderNumber: generateOrderNumber(),
         status: getRandomItem(orderStatuses),
         paymentStatus: getRandomItem(paymentStatuses),
-        shippingStatus: getRandomItem(shippingStatuses),
         subtotal,
         tax,
         shipping,

@@ -91,7 +91,7 @@ export async function PUT(
     const body = await req.json();
 
     // Extract update fields
-    const { status, paymentStatus, shippingStatus, notes } = body;
+    const { status, paymentStatus, notes } = body;
 
     // Validate order belongs to this shop
     const order = await db.order.findUnique({
@@ -112,7 +112,6 @@ export async function PUT(
       data: {
         status: status || undefined,
         paymentStatus: paymentStatus || undefined,
-        shippingStatus: shippingStatus || undefined,
         notes: notes !== undefined ? notes : undefined,
         updatedAt: new Date(),
       },
@@ -198,8 +197,7 @@ export async function DELETE(
       where: { id: orderId },
       data: {
         status: "CANCELLED",
-        paymentStatus: "CANCELLED",
-        shippingStatus: "CANCELLED",
+        paymentStatus: "FAILED",
         updatedAt: new Date(),
       },
     });

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     // Determine role based on context
     // For subdomain shops, create a customer account by default
-    let role = "CUSTOMER";
+    const role = "CUSTOMER";
 
     // Create user
     const user = await db.user.create({

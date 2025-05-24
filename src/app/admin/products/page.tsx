@@ -405,12 +405,12 @@ export default function ProductsPage() {
                             <div>
                               <Link
                                 href={`/admin/products/${product.id}`}
-                                className="font-medium text-gray-800 hover:text-indigo-600 hover:underline"
+                                className="font-medium text-gray-200 hover:text-blue-600 hover:underline"
                               >
                                 {product.name}
                               </Link>
                               {product.description && (
-                                <div className="text-xs text-gray-500 mt-0.5 max-w-xs truncate">
+                                <div className="text-xs text-gray-400 mt-0.5 max-w-xs truncate">
                                   {product.description}
                                 </div>
                               )}
@@ -433,7 +433,7 @@ export default function ProductsPage() {
                                 ? "text-red-500 font-medium"
                                 : product.inventory <= lowStockThreshold
                                 ? "text-amber-500 font-medium"
-                                : "text-gray-700"
+                                : "text-gray-200"
                             }
                           >
                             {product.inventory}
@@ -483,10 +483,10 @@ export default function ProductsPage() {
                           <div className="text-xs">
                             {product.barcode && (
                               <div className="flex items-center">
-                                <span className="text-gray-500 mr-1">
+                                <span className="text-gray-400 mr-1">
                                   Barcode:
                                 </span>
-                                <span className="text-gray-700">
+                                <span className="text-gray-300">
                                   {product.barcode}
                                 </span>
                               </div>
@@ -500,7 +500,7 @@ export default function ProductsPage() {
                               </div>
                             )}
                             {!product.barcode && !product.sku && (
-                              <span className="text-gray-400">Not set</span>
+                              <span className="text-gray-300">Not set</span>
                             )}
                           </div>
                         </TableCell>
@@ -523,7 +523,7 @@ export default function ProductsPage() {
                             <div className="flex items-center">
                               <Link
                                 href={`/admin/orders?product=${product.id}`}
-                                className="flex items-center text-blue-600 hover:text-blue-800 hover:underline"
+                                className="flex items-center text-blue-400 hover:text-blue-600 hover:underline"
                               >
                                 <ShoppingBag className="h-3 w-3 mr-1" />
                                 <span>{product._count.orderItems}</span>
@@ -616,7 +616,7 @@ export default function ProductsPage() {
                       </div>
                     </div>
                     <CardContent className="p-4">
-                      <h3 className="font-medium text-gray-800 mb-1 truncate">
+                      <h3 className="font-medium text-gray-200 mb-1 truncate">
                         <Link
                           href={`/admin/products/${product.id}`}
                           className="hover:text-indigo-600 hover:underline"
@@ -625,10 +625,10 @@ export default function ProductsPage() {
                         </Link>
                       </h3>
                       <div className="flex justify-between items-center mb-2">
-                        <div className="text-gray-700 font-medium">
+                        <div className="text-gray-400 font-medium">
                           {formatCurrency(product.price)}
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-400">
                           {product._count &&
                             product._count.variants > 0 &&
                             `${product._count.variants} variants`}
@@ -663,7 +663,7 @@ export default function ProductsPage() {
                           {product._count && product._count.orderItems > 0 ? (
                             <Link
                               href={`/admin/orders?product=${product.id}`}
-                              className="flex items-center text-gray-600 hover:text-indigo-600 hover:underline"
+                              className="flex items-center text-gray-300 hover:text-blue-400 hover:underline"
                             >
                               <ShoppingBag className="h-3 w-3 mr-1" />
                               {product._count.orderItems} orders

@@ -78,6 +78,7 @@ model User {
   resetPasswordToken String?
   createdSubscriptions Subscription[] // Subscriptions created by this user
   discountCodes     DiscountCode[]
+  processedOrders   Order[]   @relation("ProcessedOrders") // Orders processed by this staff member IN_STORE
 }
 
 enum Role {
@@ -128,7 +129,7 @@ model SubscriptionPayment {
   subscription      Subscription       @relation(fields: [subscriptionId], references: [id])
   amount            Float
   paymentDate       DateTime
-  paymentMethod     PaymentMethodType
+  paymentMethod     PaymentMethodType  @default(CASH)
   status            PaymentStatus      @default(PENDING)
   transactionId     String?            // External transaction reference
   receiptUrl        String?            // URL to receipt/invoice
@@ -312,7 +313,8 @@ model Order {
   discount          Float     @default(0)
   total             Float
   paymentStatus     PaymentStatus @default(PENDING)
-  shippingStatus    ShippingStatus @default(PENDING)
+  paymentMethodType PaymentMethodType @default(CASH)
+  orderSource       OrderSource @default(ONLINE) // NEW FIELD
   notes             String?
   userId            String
   user              User      @relation(fields: [userId], references: [id])
@@ -324,23 +326,24 @@ model Order {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   invoice           Invoice?
+  processedByUserId String?   // Staff member who processed the order (for IN_STORE orders)
+  processedBy       User?     @relation("ProcessedOrders", fields: [processedByUserId], references: [id])
 }
 
 enum OrderStatus {
   PENDING
-  PROCESSING
   SHIPPED
   DELIVERED
   CANCELLED
   REFUNDED
+  RETURNED
 }
 
-enum ShippingStatus {
-  PENDING
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  RETURNED
+
+enum OrderSource {
+  ONLINE      // Order placed through website/e-commerce
+  IN_STORE    // Order placed in physical store/local POS
+  PHONE       // Order placed via phone call
 }
 
 model OrderItem {

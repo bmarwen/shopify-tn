@@ -93,7 +93,6 @@ export async function POST(req: NextRequest) {
         notes,
         status: "PENDING",
         paymentStatus: "PENDING",
-        shippingStatus: "PENDING",
         items: {
           create: items.map((item) => ({
             productId: item.productId,
@@ -130,7 +129,7 @@ export async function PUT(
     const orderId = params.id;
     const body = await req.json();
 
-    const { status, paymentStatus, shippingStatus } = body;
+    const { status, paymentStatus } = body;
 
     // Validate order exists and belongs to the shop
     const order = await db.order.findUnique({
@@ -144,7 +143,7 @@ export async function PUT(
     // Update order
     const updatedOrder = await db.order.update({
       where: { id: orderId },
-      data: { status, paymentStatus, shippingStatus },
+      data: { status, paymentStatus },
     });
 
     return NextResponse.json(updatedOrder);
