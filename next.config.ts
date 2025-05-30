@@ -8,14 +8,47 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    domains: [
-      "your-store-bucket.s3.amazonaws.com",
-      "your-store-bucket.s3.eu-west-3.amazonaws.com",
-      "localhost",
-      "placehold.co",
-      "placekitten.com",
-      "via.placeholder.com",
-      "paraeljynene.store.tn",
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.s3.*.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.s3.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'shopify-tn-images-dev.s3.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'shopify-tn-images-dev.s3.eu-west-3.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'shopify-tn-images-prod.s3.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'shopify-tn-images-prod.s3.eu-west-3.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'placekitten.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'via.placeholder.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'paraeljynene.store.tn',
+      },
     ],
   },
   async headers() {

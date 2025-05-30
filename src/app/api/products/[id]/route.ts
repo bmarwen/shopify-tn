@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
-import { s3ImageService } from "@/lib/services/s3-image.service";
+import s3EnhancedService from "@/lib/services/s3-enhanced.service";
 
 // GET a specific product
 export async function GET(
@@ -26,10 +26,13 @@ export async function GET(
       },
       include: {
         categories: true,
-        variants: true,
-        customFields: {
+        variants: {
           include: {
-            customField: true,
+            customFields: {
+              include: {
+                customField: true,
+              },
+            },
           },
         },
       },
@@ -45,9 +48,9 @@ export async function GET(
       try {
         const processedImages = await Promise.all(
           product.images.map(async (image) => {
-            if (s3ImageService.isS3Key(image)) {
+            if (s3EnhancedService.isS3Key(image)) {
               try {
-                return await s3ImageService.getImageUrl(image);
+                return s3EnhancedService.getPublicUrl(image);
               } catch (error) {
                 console.error(`Error getting image URL for ${image}:`, error);
                 return image; // Return original key if URL generation fails
@@ -113,18 +116,34 @@ export async function PUT(
       name,
       slug,
       description,
-      price,
-      cost,
       sku,
       barcode,
-      inventory,
-      tva,
+      weight,
+      dimensions,
       categoryIds,
       images,
       variants,
       expiryDate,
       customFieldValues,
     } = body;
+
+    // Validate that we have at least one variant
+    if (!variants || variants.length === 0) {
+      return NextResponse.json(
+        { error: "At least one variant is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate that all variants have required fields
+    for (const variant of variants) {
+      if (!variant.name || variant.price === undefined) {
+        return NextResponse.json(
+          { error: "All variants must have a name and price" },
+          { status: 400 }
+        );
+      }
+    }
 
     // Generate slug if changed
     const productSlug = slugify(name);
@@ -156,7 +175,7 @@ export async function PUT(
     if (existingProduct.images && existingProduct.images.length > 0) {
       for (const oldImage of existingProduct.images) {
         if (
-          s3ImageService.isS3Key(oldImage) &&
+          s3EnhancedService.isS3Key(oldImage) &&
           (!images || !images.includes(oldImage))
         ) {
           imagesToDelete.push(oldImage);
@@ -170,10 +189,9 @@ export async function PUT(
         if (image.startsWith("data:")) {
           // New base64 image to upload to S3
           try {
-            const fileNameBase = `${productSlug}-${Date.now()}`;
-            const uploadResult = await s3ImageService.uploadImage(
+            const uploadResult = await s3EnhancedService.uploadBase64Image(
               image,
-              `${fileNameBase}.jpg`,
+              `${productSlug}-${Date.now()}.jpg`,
               "products"
             );
             processedImages.push(uploadResult.key);
@@ -191,7 +209,7 @@ export async function PUT(
     // Delete old S3 images that are no longer used
     for (const imageToDelete of imagesToDelete) {
       try {
-        await s3ImageService.deleteImage(imageToDelete);
+        await s3EnhancedService.deleteImage(imageToDelete);
         console.log(`Deleted old product image: ${imageToDelete}`);
       } catch (deleteError) {
         console.error(
@@ -211,12 +229,10 @@ export async function PUT(
           name,
           slug: productSlug,
           description,
-          price,
-          cost,
           sku,
           barcode,
-          inventory,
-          tva,
+          weight,
+          dimensions,
           expiryDate: expiryDate ? new Date(expiryDate) : null,
           images: processedImages, // Use the processed images array
           categories: {
@@ -229,24 +245,7 @@ export async function PUT(
         },
       });
 
-      // Handle custom field values
-      if (customFieldValues && customFieldValues.length > 0) {
-        // Remove existing custom field values
-        await tx.customFieldValue.deleteMany({
-          where: { productId },
-        });
-
-        // Add new custom field values
-        for (const field of customFieldValues) {
-          await tx.customFieldValue.create({
-            data: {
-              customFieldId: field.customFieldId,
-              value: field.value,
-              productId,
-            },
-          });
-        }
-      }
+      // Legacy custom field handling removed - using variant-based custom fields now
 
       // Handle variants
       if (variants && variants.length > 0) {
@@ -270,30 +269,60 @@ export async function PUT(
 
         // Update or create variants
         for (const variant of variants) {
+          let variantRecord;
+          
           if (variant.id) {
             // Update existing variant
-            await tx.productVariant.update({
+            variantRecord = await tx.productVariant.update({
               where: { id: variant.id },
               data: {
                 name: variant.name,
                 price: variant.price,
-                inventory: variant.inventory,
-                sku: variant.sku,
-                options: variant.options,
+                cost: variant.cost || null,
+                tva: variant.tva || 19,
+                inventory: variant.inventory || 0,
+                sku: variant.sku || null,
+                barcode: variant.barcode || null,
+                images: variant.images || [],
+                options: variant.options || {},
               },
+            });
+
+            // Delete existing custom field values for this variant
+            await tx.variantCustomFieldValue.deleteMany({
+              where: { variantId: variant.id },
             });
           } else {
             // Create new variant
-            await tx.productVariant.create({
+            variantRecord = await tx.productVariant.create({
               data: {
                 name: variant.name,
                 price: variant.price,
-                inventory: variant.inventory,
-                sku: variant.sku,
-                options: variant.options,
+                cost: variant.cost || null,
+                tva: variant.tva || 19,
+                inventory: variant.inventory || 0,
+                sku: variant.sku || null,
+                barcode: variant.barcode || null,
+                images: variant.images || [],
+                options: variant.options || {},
                 productId,
               },
             });
+          }
+
+          // Create custom field values for this variant if any
+          if (variant.customFieldValues && variant.customFieldValues.length > 0) {
+            await Promise.all(
+              variant.customFieldValues.map((cfv: any) =>
+                tx.variantCustomFieldValue.create({
+                  data: {
+                    customFieldId: cfv.customFieldId,
+                    value: cfv.value,
+                    variantId: variantRecord.id,
+                  },
+                })
+              )
+            );
           }
         }
       } else {
@@ -311,10 +340,13 @@ export async function PUT(
       where: { id: productId },
       include: {
         categories: true,
-        variants: true,
-        customFields: {
+        variants: {
           include: {
-            customField: true,
+            customFields: {
+              include: {
+                customField: true,
+              },
+            },
           },
         },
       },
@@ -328,17 +360,17 @@ export async function PUT(
       completeProduct.images.length > 0
     ) {
       const imageUrls = await Promise.all(
-        completeProduct.images.map(async (image) => {
-          if (s3ImageService.isS3Key(image)) {
-            try {
-              return await s3ImageService.getImageUrl(image);
-            } catch (error) {
-              console.error(`Error getting image URL for ${image}:`, error);
-              return image; // Return original key if URL generation fails
-            }
-          }
-          return image; // Return original URL if not an S3 key
-        })
+      completeProduct.images.map(async (image) => {
+      if (s3EnhancedService.isS3Key(image)) {
+      try {
+      return s3EnhancedService.getPublicUrl(image);
+      } catch (error) {
+      console.error(`Error getting image URL for ${image}:`, error);
+      return image; // Return original key if URL generation fails
+      }
+      }
+      return image; // Return original URL if not an S3 key
+      })
       );
 
       responseProduct = {
@@ -393,13 +425,17 @@ export async function DELETE(
 
     // Get any S3 image keys that need to be deleted
     const s3ImagesToDelete =
-      product.images?.filter((image) => s3ImageService.isS3Key(image)) || [];
+      product.images?.filter((image) => s3EnhancedService.isS3Key(image)) || [];
 
     // Delete in a transaction to ensure all related records are deleted properly
     await db.$transaction(async (tx) => {
-      // 1. Delete custom field values associated with the product
-      await tx.customFieldValue.deleteMany({
-        where: { productId },
+      // 1. Delete variant custom field values associated with the product variants
+      await tx.variantCustomFieldValue.deleteMany({
+        where: {
+          variant: {
+            productId,
+          },
+        },
       });
 
       // 2. Delete variants associated with the product
@@ -454,15 +490,15 @@ export async function DELETE(
     if (s3ImagesToDelete.length > 0) {
       for (const imageKey of s3ImagesToDelete) {
         try {
-          await s3ImageService.deleteImage(imageKey);
+          await s3EnhancedService.deleteImage(imageKey);
           console.log(`Deleted product image from S3: ${imageKey}`);
-        } catch (error) {
+          } catch (error) {
           console.error(
-            `Error deleting product image ${imageKey} from S3:`,
-            error
+          `Error deleting product image ${imageKey} from S3:`,
+          error
           );
           // Continue even if S3 deletion fails - the product is already deleted
-        }
+          }
       }
     }
 

@@ -9,30 +9,52 @@ import { Trash, Plus, ChevronDown, ChevronUp } from "lucide-react";
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useCurrency } from "@/hooks/use-currency.hook";
+import VariantCustomFields from "./variant-custom-fields";
+
+interface VariantCustomFieldValue {
+  id?: string;
+  customFieldId: string;
+  value: string;
+}
 
 interface Variant {
   id?: string;
   name: string;
-  price: number;
+  price: number;   // Required
+  cost?: number;
+  tva: number;
   inventory: number;
   sku?: string;
   barcode?: string;
   options: Record<string, string>;
+  customFieldValues?: VariantCustomFieldValue[];
+}
+
+interface AvailableCustomField {
+  id: string;
+  name: string;
+  type: string;
+  required: boolean;
 }
 
 interface ProductVariantsFormProps {
   variants: Variant[];
   onChange: (variants: Variant[]) => void;
+  customFields?: AvailableCustomField[];
+  onRefreshCustomFields?: () => Promise<void>;
 }
 
 export default function ProductVariantsForm({
   variants = [],
   onChange,
+  customFields = [],
+  onRefreshCustomFields,
 }: ProductVariantsFormProps) {
+  const { formatPrice, currencySymbol } = useCurrency();
   // Local state to ensure we don't lose changes when switching tabs
   const [localVariants, setLocalVariants] = useState<Variant[]>(variants);
   const [expandedVariants, setExpandedVariants] = useState<Set<number>>(
@@ -76,13 +98,17 @@ export default function ProductVariantsForm({
     // Create a new variant with empty values for each option type
     const newVariant: Variant = {
       name: "",
-      price: 0,
+      price: 0,        // Required - default to 0
+      cost: undefined,
+      tva: 19,         // Default TVA
       inventory: 0,
       sku: "",
+      barcode: "",
       options: optionTypes.reduce((acc, type) => {
         acc[type] = "";
         return acc;
       }, {} as Record<string, string>),
+      customFieldValues: [], // Initialize empty custom fields
     };
 
     const updatedVariants = [...localVariants, newVariant];
@@ -369,13 +395,19 @@ export default function ProductVariantsForm({
                   </div>
                   <div className="flex items-center">
                     <span style={{ color: "#2c3e50" }}>
-                      ${variant.price.toFixed(2)}
+                      {formatPrice(variant.price)}
                     </span>
                     <span className="mx-2 text-sm" style={{ color: "#7f8c8d" }}>
                       |
                     </span>
                     <span style={{ color: "#2c3e50" }}>
                       {variant.inventory} in stock
+                    </span>
+                    <span className="mx-2 text-sm" style={{ color: "#7f8c8d" }}>
+                      |
+                    </span>
+                    <span style={{ color: "#2c3e50" }}>
+                      {variant.tva}% TVA
                     </span>
                   </div>
                 </CardHeader>
@@ -389,15 +421,14 @@ export default function ProductVariantsForm({
                       {/* Option values section */}
                       <div>
                         <h4
-                          className="font-medium mb-2"
-                          style={{ color: "#2c3e50" }}
+                          className="font-medium mb-2 text-gray-200"
                         >
                           Options
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           {optionTypes.map((optionType) => (
                             <div key={optionType} className="space-y-2">
-                              <Label style={{ color: "#2c3e50" }}>
+                              <Label className="text-gray-400">
                                 {optionType}
                               </Label>
                               <Input
@@ -423,57 +454,13 @@ export default function ProductVariantsForm({
                       {/* Basic info section */}
                       <div>
                         <h4
-                          className="font-medium mb-2"
-                          style={{ color: "#2c3e50" }}
+                          className="font-medium mb-2 text-gray-200"
                         >
-                          Variant Details
+                          Inventory
                         </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                           <div className="space-y-2">
-                            <Label style={{ color: "#2c3e50" }}>
-                              Variant Name
-                            </Label>
-                            <Input
-                              value={variant.name}
-                              onChange={(e) =>
-                                updateVariant(index, "name", e.target.value)
-                              }
-                              placeholder="Auto-generated from options if empty"
-                              className="border-2"
-                              style={{
-                                borderColor: "#bdc3c7",
-                                color: "#2c3e50",
-                                backgroundColor: "white",
-                              }}
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label style={{ color: "#2c3e50" }}>Price</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={variant.price}
-                              onChange={(e) =>
-                                updateVariant(
-                                  index,
-                                  "price",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="border-2"
-                              style={{
-                                borderColor: "#bdc3c7",
-                                color: "#2c3e50",
-                                backgroundColor: "white",
-                              }}
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label style={{ color: "#2c3e50" }}>
-                              Inventory
-                            </Label>
+                            <Label className="text-gray-400">Quantity</Label>
                             <Input
                               type="number"
                               value={variant.inventory}
@@ -495,17 +482,96 @@ export default function ProductVariantsForm({
                         </div>
                       </div>
 
+                      {/* Pricing section */}
+                      <div>
+                        <h4
+                          className="font-medium mb-2 text-gray-200"
+                        >
+                          Pricing & Tax
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-gray-400">Price ({currencySymbol})</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={variant.price || ""}
+                              onChange={(e) =>
+                                updateVariant(
+                                  index,
+                                  "price",
+                                  e.target.value ? parseFloat(e.target.value) : undefined
+                                )
+                              }
+                              placeholder="Leave empty to use product price"
+                              className="border-2"
+                              style={{
+                                borderColor: "#bdc3c7",
+                                color: "#2c3e50",
+                                backgroundColor: "white",
+                              }}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label  className="text-gray-400">Cost ({currencySymbol})</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={variant.cost || ""}
+                              onChange={(e) =>
+                                updateVariant(
+                                  index,
+                                  "cost",
+                                  e.target.value ? parseFloat(e.target.value) : undefined
+                                )
+                              }
+                              placeholder="Optional"
+                              className="border-2"
+                              style={{
+                                borderColor: "#bdc3c7",
+                                color: "#2c3e50",
+                                backgroundColor: "white",
+                              }}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label  className="text-gray-400">TVA (%)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              value={variant.tva}
+                              onChange={(e) =>
+                                updateVariant(
+                                  index,
+                                  "tva",
+                                  parseFloat(e.target.value) || 19
+                                )
+                              }
+                              className="border-2"
+                              style={{
+                                borderColor: "#bdc3c7",
+                                color: "#2c3e50",
+                                backgroundColor: "white",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Extra fields */}
                       <div>
                         <h4
-                          className="font-medium mb-2"
-                          style={{ color: "#2c3e50" }}
+                          className="font-medium mb-2 text-gray-200"
                         >
                           Additional Information
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label style={{ color: "#2c3e50" }}>SKU</Label>
+                            <Label className="text-gray-400">SKU</Label>
                             <Input
                               value={variant.sku || ""}
                               onChange={(e) =>
@@ -522,7 +588,7 @@ export default function ProductVariantsForm({
                           </div>
 
                           <div className="space-y-2">
-                            <Label style={{ color: "#2c3e50" }}>Barcode</Label>
+                            <Label className="text-gray-400">Barcode</Label>
                             <Input
                               value={variant.barcode || ""}
                               onChange={(e) =>
@@ -538,6 +604,21 @@ export default function ProductVariantsForm({
                             />
                           </div>
                         </div>
+                      </div>
+
+                      {/* Custom Fields Section */}
+                      <div>
+                        <h4
+                          className="font-medium mb-2 text-gray-200"
+                        >
+                          Custom Fields
+                        </h4>
+                        <VariantCustomFields
+                          customFieldValues={variant.customFieldValues || []}
+                          availableCustomFields={customFields}
+                          onChange={(fields) => updateVariant(index, "customFieldValues", fields)}
+                          onRefreshCustomFields={onRefreshCustomFields}
+                        />
                       </div>
                     </div>
 

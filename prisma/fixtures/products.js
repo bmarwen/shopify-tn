@@ -39,201 +39,231 @@ async function run(prisma) {
     {
       name: "Smartphone X",
       description: "The latest smartphone with amazing features.",
-      price: 999.99,
-      inventory: 50,
       images: ["/assets/images/products/smartphone-x.jpg"],
       categories: ["Smartphones"],
       variants: [
         {
           name: "Black / 128GB",
           inventory: 20,
-          options: { color: "Black", storage: "128GB" },
           price: 999.99,
+          cost: 750.00,
+          tva: 19,
+          options: { color: "Black", storage: "128GB" },
         },
         {
           name: "Black / 256GB",
           inventory: 15,
-          options: { color: "Black", storage: "256GB" },
           price: 1099.99,
+          cost: 850.00,
+          tva: 19,
+          options: { color: "Black", storage: "256GB" },
         },
         {
           name: "White / 128GB",
           inventory: 10,
-          options: { color: "White", storage: "128GB" },
           price: 999.99,
+          cost: 750.00,
+          tva: 19,
+          options: { color: "White", storage: "128GB" },
         },
         {
           name: "White / 256GB",
           inventory: 5,
-          options: { color: "White", storage: "256GB" },
           price: 1099.99,
+          cost: 850.00,
+          tva: 19,
+          options: { color: "White", storage: "256GB" },
         },
       ],
     },
     {
       name: "Laptop Pro",
       description: "Powerful laptop for professionals.",
-      price: 1499.99,
-      inventory: 30,
       images: ["/assets/images/products/laptop-pro.jpg"],
       categories: ["Laptops", "Business"],
       variants: [
         {
           name: "Silver / i5 / 8GB / 256GB",
           inventory: 15,
+          price: 1499.99,
+          cost: 1200.00,
+          tva: 19,
           options: {
             color: "Silver",
             processor: "i5",
             ram: "8GB",
             storage: "256GB",
           },
-          price: 1499.99,
         },
         {
           name: "Silver / i7 / 16GB / 512GB",
           inventory: 10,
+          price: 1899.99,
+          cost: 1500.00,
+          tva: 19,
           options: {
             color: "Silver",
             processor: "i7",
             ram: "16GB",
             storage: "512GB",
           },
-          price: 1899.99,
         },
         {
           name: "Space Gray / i5 / 8GB / 256GB",
           inventory: 5,
+          price: 1499.99,
+          cost: 1200.00,
+          tva: 19,
           options: {
             color: "Space Gray",
             processor: "i5",
             ram: "8GB",
             storage: "256GB",
           },
-          price: 1499.99,
         },
       ],
     },
     {
       name: "Wireless Headphones",
       description: "Premium wireless headphones with noise cancellation.",
-      price: 249.99,
-      inventory: 100,
       images: ["/assets/images/products/headphones.jpg"],
       categories: ["Audio"],
       variants: [
         {
           name: "Black",
           inventory: 50,
-          options: { color: "Black" },
           price: 249.99,
+          cost: 180.00,
+          tva: 19,
+          options: { color: "Black" },
         },
         {
           name: "White",
           inventory: 30,
-          options: { color: "White" },
           price: 249.99,
+          cost: 180.00,
+          tva: 19,
+          options: { color: "White" },
         },
         {
           name: "Blue",
           inventory: 20,
-          options: { color: "Blue" },
           price: 259.99,
+          cost: 190.00,
+          tva: 19,
+          options: { color: "Blue" },
         },
       ],
     },
     {
       name: "T-Shirt Basic",
       description: "Comfortable cotton t-shirt for everyday wear.",
-      price: 24.99,
-      inventory: 200,
       images: ["/assets/images/products/tshirt.jpg"],
       categories: ["Men", "Women"],
       variants: [
         {
           name: "White / S",
           inventory: 30,
-          options: { color: "White", size: "S" },
           price: 24.99,
+          cost: 15.00,
+          tva: 19,
+          options: { color: "White", size: "S" },
         },
         {
           name: "White / M",
           inventory: 40,
-          options: { color: "White", size: "M" },
           price: 24.99,
+          cost: 15.00,
+          tva: 19,
+          options: { color: "White", size: "M" },
         },
         {
           name: "White / L",
           inventory: 30,
-          options: { color: "White", size: "L" },
           price: 24.99,
+          cost: 15.00,
+          tva: 19,
+          options: { color: "White", size: "L" },
         },
         {
           name: "Black / S",
           inventory: 30,
-          options: { color: "Black", size: "S" },
           price: 24.99,
+          cost: 15.00,
+          tva: 19,
+          options: { color: "Black", size: "S" },
         },
         {
           name: "Black / M",
           inventory: 40,
-          options: { color: "Black", size: "M" },
           price: 24.99,
+          cost: 15.00,
+          tva: 19,
+          options: { color: "Black", size: "M" },
         },
         {
           name: "Black / L",
           inventory: 30,
-          options: { color: "Black", size: "L" },
           price: 24.99,
+          cost: 15.00,
+          tva: 19,
+          options: { color: "Black", size: "L" },
         },
       ],
     },
     {
       name: "Coffee Table",
       description: "Modern coffee table for your living room.",
-      price: 199.99,
-      inventory: 15,
       images: ["/assets/images/products/coffee-table.jpg"],
       categories: ["Furniture"],
       variants: [
         {
           name: "Oak",
           inventory: 8,
-          options: { material: "Oak" },
           price: 199.99,
+          cost: 120.00,
+          tva: 19,
+          options: { material: "Oak" },
         },
         {
           name: "Walnut",
           inventory: 7,
-          options: { material: "Walnut" },
           price: 219.99,
+          cost: 140.00,
+          tva: 19,
+          options: { material: "Walnut" },
         },
       ],
     },
     {
       name: "Yoga Mat",
       description: "Premium non-slip yoga mat for your practice.",
-      price: 39.99,
-      inventory: 80,
       images: ["/assets/images/products/yoga-mat.jpg"],
       categories: ["Fitness"],
       variants: [
         {
           name: "Purple",
           inventory: 30,
-          options: { color: "Purple" },
           price: 39.99,
+          cost: 25.00,
+          tva: 19,
+          options: { color: "Purple" },
         },
         {
           name: "Blue",
           inventory: 30,
-          options: { color: "Blue" },
           price: 39.99,
+          cost: 25.00,
+          tva: 19,
+          options: { color: "Blue" },
         },
         {
           name: "Green",
           inventory: 20,
-          options: { color: "Green" },
           price: 39.99,
+          cost: 25.00,
+          tva: 19,
+          options: { color: "Green" },
         },
       ],
     },
@@ -257,8 +287,6 @@ async function run(prisma) {
         name: productData.name,
         slug: slugify(productData.name),
         description: productData.description,
-        price: productData.price,
-        inventory: productData.inventory,
         images: productData.images,
         shopId: shop.id,
         categories: {
@@ -270,13 +298,15 @@ async function run(prisma) {
     products.push(product);
     console.log(`Created product: ${product.name}`);
 
-    // Create variants if they exist
+    // Create variants - required for all products now
     if (productData.variants && productData.variants.length > 0) {
       for (const variantData of productData.variants) {
         const variant = await prisma.productVariant.create({
           data: {
             name: variantData.name,
             price: variantData.price,
+            cost: variantData.cost || null,
+            tva: variantData.tva || 19,
             inventory: variantData.inventory,
             options: variantData.options,
             productId: product.id,
@@ -284,6 +314,19 @@ async function run(prisma) {
         });
         console.log(`  - Created variant: ${variant.name}`);
       }
+    } else {
+      // If no variants defined, create a default variant
+      const defaultVariant = await prisma.productVariant.create({
+        data: {
+          name: "Default",
+          price: 0,
+          tva: 19,
+          inventory: 0,
+          options: {},
+          productId: product.id,
+        },
+      });
+      console.log(`  - Created default variant: ${defaultVariant.name}`);
     }
   }
 

@@ -22,12 +22,14 @@ interface CustomFieldsTabProps {
   control: Control<ProductFormValues>;
   customFields: CustomField[];
   onFormStateChange: (field: string, value: any) => void;
+  onRefreshCustomFields?: () => Promise<void>;
 }
 
 export default function CustomFieldsTab({
   control,
   customFields,
   onFormStateChange,
+  onRefreshCustomFields,
 }: CustomFieldsTabProps) {
   return (
     <Card className="border-0 shadow">
@@ -58,6 +60,7 @@ export default function CustomFieldsTab({
                     // Update the parent form state
                     onFormStateChange("customFieldValues", fields);
                   }}
+                  onRefreshCustomFields={onRefreshCustomFields}
                 />
               </FormControl>
             </FormItem>

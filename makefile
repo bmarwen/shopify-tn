@@ -1,4 +1,31 @@
+# Complete setup for enhanced discount codes system
+.PHONY: setup-enhanced-discounts
+setup-enhanced-discounts:
+	@echo "🚀 Setting up Enhanced Discount Codes System..."
+	@echo "🗑️ Clearing existing data..."
+	node prisma/fixtures/clear-all.js
+	@echo "📤 Pushing schema changes to database..."
+	npx prisma db push --accept-data-loss
+	@echo "🔄 Regenerating Prisma client..."
+	npx prisma generate
+	@echo "📦 Loading fixtures..."
+	node prisma/fixtures/run.js
+	@echo "✅ Enhanced discount codes system setup complete!"
+	@echo "🎉 New Features: Multi-product targeting, variant-specific codes, category targeting!"
+	@echo "🔍 Check your discount codes - enhanced targeting is now active!"
 
+# Fix database for enhanced discount codes support (quick version)
+.PHONY: fix-enhanced-discounts
+fix-enhanced-discounts:
+	@echo "🔧 Fixing database schema for enhanced discount codes..."
+	@echo "📤 Pushing schema changes to database..."
+	npx prisma db push --accept-data-loss
+	@echo "🔄 Regenerating Prisma client..."
+	npx prisma generate
+	@echo "📦 Loading fixtures..."
+	node prisma/fixtures/run.js
+	@echo "✅ Enhanced discount codes system ready!"
+	@echo "🎉 You can now target products, variants, categories, and users!"
 # Variables
 APP_NAME = para-shop
 PORT = 3001
@@ -17,6 +44,8 @@ help:
 	@echo "  make prisma-studio - Start Prisma Studio to view/edit database"
 	@echo "  make extract-code  - Extract code files to text for documentation"
 	@echo "  make clean         - Clean build artifacts"
+	@echo "  make setup-enhanced-discount-system - Setup enhanced discount system (discounts + codes)"
+	@echo "  make fix-enhanced-discount-system   - Quick fix for enhanced discount system"
 
 # Set up everything
 .PHONY: setup
@@ -257,7 +286,7 @@ start-all: db-start start
 db-reset:
 	npx prisma migrate reset --force
 
-# Clear all data without dropping schema
+# Clear all data without dropping schema (improved)
 .PHONY: clear-db
 clear-db:
 	node prisma/fixtures/clear-all.js
@@ -268,17 +297,42 @@ deploy: build
 	npm run start
 
 
-# Reset database and reload all fixtures USED
-.PHONY: reset-and-reload
-reset-and-reload:
-	@echo "🗑️  Resetting database and reloading fixtures..."
-	
-	# Reset the database schema (skip the seed)
-	npx prisma migrate reset --force --skip-seed
-	@echo "✅ Database schema reset"
-	
-	# Run fixtures runner script to load all fixtures in order
-	@echo "📦 Loading all fixtures..."
+# Complete setup for multi-payment system
+.PHONY: setup-multi-payment
+setup-multi-payment:
+	@echo "🚀 Setting up Multi-Payment System Database..."
+	@echo "🗑️ Clearing existing data..."
+	node prisma/fixtures/clear-all.js
+	@echo "📤 Pushing schema changes to database..."
+	npx prisma db push --accept-data-loss
+	@echo "🔄 Regenerating Prisma client..."
+	npx prisma generate
+	@echo "📦 Loading fixtures..."
 	node prisma/fixtures/run.js
-	
+	@echo "✅ Multi-payment database setup complete!"
+	@echo "🎉 New Features: Mix cash + check payments, multiple checks per order!"
+	@echo "🔍 Check your POS system - multi-payment checkout is now active!"
+
+# Fix database for multi-payment support (quick version)
+.PHONY: fix-multi-payment
+fix-multi-payment:
+	@echo "🔧 Fixing database schema for multi-payment support..."
+	@echo "📤 Pushing schema changes to database..."
+	npx prisma db push --accept-data-loss
+	@echo "🔄 Regenerating Prisma client..."
+	npx prisma generate
+	@echo "📦 Loading fixtures..."
+	node prisma/fixtures/run.js
+	@echo "✅ Multi-payment database setup complete!"
+	@echo "🎉 You can now mix cash + check payments!"
+
+# Reset database with proper migration handling
+.PHONY: db-reset-migration
+db-reset-migration:
+	@echo "🗑️  Resetting database for migration..."
+	npx prisma migrate reset --force --skip-seed
+	@echo "✅ Database reset complete"
+	npx prisma db push
+	@echo "✅ Schema pushed to database"
+	node prisma/fixtures/run.js
 	@echo "✅ All fixtures loaded"

@@ -6,11 +6,33 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(amount);
+export function formatCurrency(amount: number, currency = "DT", symbol?: string): string {
+  // Default symbols for common currencies
+  const currencySymbols: Record<string, string> = {
+    DT: "DT", // Tunisian Dinar
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+    JPY: "¥",
+    CAD: "C$",
+    AUD: "A$",
+    CHF: "CHF",
+    CNY: "¥",
+    INR: "₹",
+  };
+
+  const currencySymbol = symbol || currencySymbols[currency] || currency;
+  
+  // Format number with 2 decimal places
+  const formattedAmount = Number(amount).toFixed(2);
+  
+  // For DT, put symbol after the amount
+  if (currency === "DT") {
+    return `${formattedAmount} ${currencySymbol}`;
+  }
+  
+  // For other currencies, put symbol before
+  return `${currencySymbol}${formattedAmount}`;
 }
 
 export function formatDate(date: Date | string): string {
@@ -62,4 +84,30 @@ export function getInitials(name: string): string {
     .map((part) => part.charAt(0).toUpperCase())
     .slice(0, 2)
     .join("");
+}
+
+/**
+ * Convert an image key/path to a full S3 URL
+ * Handles various formats: S3 keys, full URLs, relative paths
+ */
+export function getImageUrl(image: string): string {
+  if (!image) return '/images/placeholder.svg';
+  
+  // If it's already a full URL, use it
+  if (image.startsWith('http')) {
+    return image;
+  }
+  
+  // If it's a relative path starting with /assets/ (old format), use placeholder
+  if (image.startsWith('/assets/') || image.startsWith('./assets/') || image.startsWith('../assets/')) {
+    return '/images/placeholder.svg';
+  }
+  
+  // If it's an S3 key (like products/filename), build full URL
+  if (image.includes('/') && !image.startsWith('/')) {
+    return `https://shopify-tn-images-dev.s3.eu-west-3.amazonaws.com/${image}`;
+  }
+  
+  // Fallback: assume it's in products folder
+  return `https://shopify-tn-images-dev.s3.eu-west-3.amazonaws.com/products/${image}`;
 }

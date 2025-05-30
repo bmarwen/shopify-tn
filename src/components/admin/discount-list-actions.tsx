@@ -26,10 +26,12 @@ import {
 
 interface DiscountListActionsProps {
   discountId: string;
+  hasOrders?: boolean; // Whether this discount has been used in orders
 }
 
 export default function DiscountListActions({
   discountId,
+  hasOrders = false,
 }: DiscountListActionsProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const router = useRouter();
@@ -41,13 +43,17 @@ export default function DiscountListActions({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to delete discount");
+        const errorData = await response.json();
+        alert(errorData.error || "Failed to delete discount");
+        return;
       }
 
       // Refresh the page
       router.refresh();
+      setShowDeleteDialog(false);
     } catch (error) {
       console.error("Error deleting discount:", error);
+      alert("Failed to delete discount");
     }
   };
 
@@ -84,10 +90,11 @@ export default function DiscountListActions({
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete Discount?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              discount.
+              Are you sure you want to delete this discount? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -96,7 +103,7 @@ export default function DiscountListActions({
               onClick={handleDelete}
               className="bg-red-600 hover:bg-red-700"
             >
-              Delete
+              Delete Discount
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

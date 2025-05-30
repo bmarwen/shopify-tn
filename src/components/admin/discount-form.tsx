@@ -1,7 +1,7 @@
 // src/components/admin/discount-form.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -16,6 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -33,18 +34,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Upload, X, Search } from "lucide-react";
+import { formatCurrency, formatDate } from "@/lib/utils/currency";
 
 // Form schema
 const discountSchema = z.object({
   productId: z.string().min(1, "Product is required"),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  image: z.string().optional(),
   percentage: z
     .number()
-    .min(0.01, "Discount must be greater than 0")
+    .min(1, "Discount must be at least 1%")
     .max(100, "Discount cannot exceed 100%"),
   enabled: z.boolean().default(true),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
+  availableOnline: z.boolean().default(true),
+  availableInStore: z.boolean().default(true),
 });
 
 type DiscountFormValues = z.infer<typeof discountSchema>;
@@ -52,20 +59,39 @@ type DiscountFormValues = z.infer<typeof discountSchema>;
 interface Product {
   id: string;
   name: string;
+  variants: {
+    id: string;
+    name: string;
+    price: number;
+  }[];
+}
+
+interface ProductForForm {
+  id: string;
+  name: string;
   price: number;
 }
 
 interface Discount {
   id: string;
+  title?: string;
+  description?: string;
+  image?: string;
   percentage: number;
   enabled: boolean;
   startDate: string | Date;
   endDate: string | Date;
   productId: string;
+  availableOnline: boolean;
+  availableInStore: boolean;
   product: {
     id: string;
     name: string;
-    price: number;
+    variants: {
+      id: string;
+      name: string;
+      price: number;
+    }[];
   };
 }
 
@@ -79,34 +105,56 @@ interface DiscountFormProps {
 export default function DiscountForm({
   discount,
   products,
-  shopId,
   isEditing = false,
 }: DiscountFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(
-    discount?.product || null
+  // Transform products to match form interface (memoized to prevent infinite loops)
+  const productsForForm: ProductForForm[] = useMemo(
+    () => products.map(product => ({
+      id: product.id,
+      name: product.name,
+      price: product.variants[0]?.price || 0,
+    })),
+    [products]
   );
 
-  // Default values for the form
-  const defaultValues: DiscountFormValues = discount
-    ? {
+  // Initial selected product (memoized to prevent re-renders)
+  const initialSelectedProduct = useMemo(() => {
+    if (discount?.product) {
+      return {
+        id: discount.product.id,
+        name: discount.product.name,
+        price: discount.product.variants[0]?.price || 0,
+      };
+    }
+    return null;
+  }, [discount]);
+
+  const [selectedProduct, setSelectedProduct] = useState<ProductForForm | null>(initialSelectedProduct);
+
+  // Default values for the form (memoized to prevent re-renders)
+  const defaultValues: DiscountFormValues = useMemo(() => {
+    if (discount) {
+      return {
         productId: discount.productId,
         percentage: discount.percentage,
         enabled: discount.enabled,
         startDate: new Date(discount.startDate).toISOString().split("T")[0],
         endDate: new Date(discount.endDate).toISOString().split("T")[0],
-      }
-    : {
-        productId: "",
-        percentage: 10,
-        enabled: true,
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .split("T")[0], // Default to 30 days from now
       };
+    }
+    return {
+      productId: "",
+      percentage: 10,
+      enabled: true,
+      startDate: new Date().toISOString().split("T")[0],
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0], // Default to 30 days from now
+    };
+  }, [discount]);
 
   // Create form
   const form = useForm<DiscountFormValues>({
@@ -121,14 +169,23 @@ export default function DiscountForm({
   // Update selected product when productId changes
   useEffect(() => {
     if (productId) {
-      const product = products.find((p) => p.id === productId);
+      const product = productsForForm.find((p) => p.id === productId);
       if (product) {
-        setSelectedProduct(product);
+        setSelectedProduct(prevSelected => {
+          // Only update if the product is different
+          if (!prevSelected || prevSelected.id !== product.id) {
+            return product;
+          }
+          return prevSelected;
+        });
       }
     } else {
-      setSelectedProduct(null);
+      setSelectedProduct(prevSelected => {
+        // Only update if there was a selected product
+        return prevSelected ? null : prevSelected;
+      });
     }
-  }, [productId, products]);
+  }, [productId, productsForForm]);
 
   // Calculate discounted price for preview
   const getDiscountedPrice = (price: number, discountPercentage: number) => {
@@ -228,9 +285,9 @@ export default function DiscountForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {products.map((product) => (
+                        {productsForForm.map((product) => (
                           <SelectItem key={product.id} value={product.id}>
-                            {product.name}
+                            {product.name} {product.price > 0 ? `(${product.price.toFixed(2)})` : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>

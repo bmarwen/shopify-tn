@@ -23,7 +23,7 @@ async function main() {
     update: {},
     create: {
       shopId: shop.id,
-      currency: "USD",
+      currency: "DT",
       language: "en",
       timezone: "UTC",
       lowStockThreshold: 5,

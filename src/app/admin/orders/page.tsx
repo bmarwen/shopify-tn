@@ -53,6 +53,8 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const search = (params.search as string) || "";
   const status = (params.status as string) || "";
   const paymentStatus = (params.paymentStatus as string) || "";
+  const orderSource = (params.orderSource as string) || "";
+  const dateFilter = (params.dateFilter as string) || "today";
   const product = (params.product as string) || undefined;
   const customer = (params.customer as string) || undefined;
   const dateFrom = (params.dateFrom as string) || undefined;
@@ -62,14 +64,17 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   let dateFromObj = undefined;
   let dateToObj = undefined;
 
-  if (dateFrom) {
-    dateFromObj = new Date(dateFrom);
-  }
+  // Only use custom dates if dateFilter is 'custom'
+  if (dateFilter === 'custom') {
+    if (dateFrom) {
+      dateFromObj = new Date(dateFrom);
+    }
 
-  if (dateTo) {
-    dateToObj = new Date(dateTo);
-    // Set to end of day
-    dateToObj.setHours(23, 59, 59, 999);
+    if (dateTo) {
+      dateToObj = new Date(dateTo);
+      // Set to end of day
+      dateToObj.setHours(23, 59, 59, 999);
+    }
   }
 
   // Prepare filters
@@ -78,6 +83,8 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
     search,
     status,
     paymentStatus,
+    orderSource,
+    dateFilter: dateFilter as 'today' | 'thisWeek' | 'thisMonth' | 'custom',
     dateFrom: dateFromObj,
     dateTo: dateToObj,
     customerId: customer,
@@ -129,6 +136,8 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
     search: search || undefined,
     status: status || undefined,
     paymentStatus: paymentStatus || undefined,
+    orderSource: orderSource || undefined,
+    dateFilter: dateFilter || undefined,
     dateFrom: dateFromObj ? dateFromObj.toISOString().split("T")[0] : undefined,
     dateTo: dateToObj ? dateToObj.toISOString().split("T")[0] : undefined,
     page: page.toString(),
@@ -251,6 +260,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
               <TableHead className="text-gray-700 w-[180px]">Order</TableHead>
               <TableHead className="text-gray-700">Customer</TableHead>
               <TableHead className="text-gray-700">Items</TableHead>
+              <TableHead className="text-gray-700">Source</TableHead>
               <TableHead className="text-gray-700">Date</TableHead>
               <TableHead className="text-gray-700">Total</TableHead>
               <TableHead className="text-gray-700">Status</TableHead>
@@ -264,7 +274,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
             {orders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-center py-8 text-gray-600"
                 >
                   No orders found matching your criteria.
@@ -324,6 +334,14 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                   </TableCell>
                   <TableCell>
                     <div className="text-sm text-gray-200">
+                      {order.orderSource === 'ONLINE' && '🌐 Online'}
+                      {order.orderSource === 'IN_STORE' && '🏪 In Store'}
+                      {order.orderSource === 'PHONE' && '📞 Phone'}
+                      {!order.orderSource && '🌐 Online'}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm text-gray-200">
                       {formatDate(order.createdAt)}
                     </div>
                     <div className="text-xs text-gray-400">
@@ -331,16 +349,78 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">
-                    {formatCurrency(order.total)}
+                    <div className="space-y-1">
+                      <div className="text-base font-semibold text-gray-800">
+                        {formatCurrency(order.total)}
+                      </div>
+                      {/* Show discount information if applied */}
+                      {order.discount > 0 && (
+                        <div className="text-xs space-y-0.5">
+                          {order.discountCodeValue && (
+                            <div className="text-green-600 font-medium">
+                              💳 Code: {order.discountCodeValue}
+                            </div>
+                          )}
+                          <div className="text-orange-600">
+                            💰 Discount: -{formatCurrency(order.discount)}
+                          </div>
+                          <div className="text-gray-500">
+                            Original: {formatCurrency(order.total + order.discount)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <OrderStatusBadge status={order.status} />
                   </TableCell>
                   <TableCell>
-                    <OrderStatusBadge
-                      status={order.paymentStatus}
-                      type="payment"
-                    />
+                    <div className="space-y-1">
+                      <OrderStatusBadge
+                        status={order.paymentStatus}
+                        type="payment"
+                      />
+                      {/* Show payment methods if available */}
+                      {order.orderPayments && order.orderPayments.length > 0 && (
+                        <div className="text-xs text-gray-400 space-y-0.5">
+                          {order.orderPayments.map((payment, idx) => (
+                            <div key={payment.id} className="flex items-center gap-1">
+                              {payment.paymentMethod === 'CASH' && '💵'}
+                              {payment.paymentMethod === 'CREDIT_CARD' && '💳'}
+                              {payment.paymentMethod === 'CHECK' && '📄'}
+                              <span className="text-xs">
+                                {payment.paymentMethod.replace('_', ' ')}: {formatCurrency(payment.amount)}
+                              </span>
+                            </div>
+                          ))}
+                          {order.orderPayments.length === 3 && (
+                            <div className="text-xs text-gray-500">...</div>
+                          )}
+                        </div>
+                      )}
+                      {/* Show legacy cash payment info */}
+                      {order.paymentMethodType === 'CASH' && order.cashAmountGiven && (
+                        <div className="text-xs text-gray-400">
+                          💵 Given: {formatCurrency(order.cashAmountGiven)}
+                          {order.cashAmountChange && order.cashAmountChange > 0 && (
+                            <span>, Change: {formatCurrency(order.cashAmountChange)}</span>
+                          )}
+                        </div>
+                      )}
+                      {/* Show check payments */}
+                      {order.checkPayments && order.checkPayments.length > 0 && (
+                        <div className="text-xs text-gray-400 space-y-0.5">
+                          {order.checkPayments.map((check, idx) => (
+                            <div key={check.id} className="flex items-center gap-1">
+                              📄 <span>#{check.checkNumber}: {formatCurrency(check.amount)}</span>
+                            </div>
+                          ))}
+                          {order.checkPayments.length === 2 && (
+                            <div className="text-xs text-gray-500">...</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <OrderListActions

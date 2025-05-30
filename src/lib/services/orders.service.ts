@@ -1,5 +1,49 @@
 import { db } from "@/lib/prisma";
 
+// Helper functions for date calculations
+function getDateRange(dateFilter: 'today' | 'thisWeek' | 'thisMonth' | 'custom') {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  switch (dateFilter) {
+    case 'today':
+      return {
+        from: today,
+        to: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+      };
+    
+    case 'thisWeek':
+      // Get Monday of current week
+      const currentDay = now.getDay();
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
+      
+      // Get Sunday of current week
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23, 59, 59, 999);
+      
+      return {
+        from: monday,
+        to: sunday
+      };
+    
+    case 'thisMonth':
+      // From 1st of current month to today
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfToday = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
+      
+      return {
+        from: firstDayOfMonth,
+        to: endOfToday
+      };
+    
+    case 'custom':
+    default:
+      return null;
+  }
+}
+
 export type OrdersFilter = {
   shopId: string;
   search?: string;
@@ -9,6 +53,8 @@ export type OrdersFilter = {
   dateTo?: Date;
   customerId?: string;
   productId?: string;
+  orderSource?: string;
+  dateFilter?: 'today' | 'thisWeek' | 'thisMonth' | 'custom';
 };
 
 export type OrdersSortOptions = {
@@ -44,6 +90,10 @@ export const ordersService = {
       where.paymentStatus = filters.paymentStatus;
     }
 
+    if (filters.orderSource) {
+      where.orderSource = filters.orderSource;
+    }
+
     if (filters.customerId) {
       where.userId = filters.customerId;
     }
@@ -54,18 +104,30 @@ export const ordersService = {
       };
     }
 
-    if (filters.dateFrom) {
-      where.createdAt = {
-        ...(where.createdAt || {}),
-        gte: filters.dateFrom,
-      };
-    }
+    // Handle date filtering with new options
+    if (filters.dateFilter && filters.dateFilter !== 'custom') {
+      const dateRange = getDateRange(filters.dateFilter);
+      if (dateRange) {
+        where.createdAt = {
+          gte: dateRange.from,
+          lte: dateRange.to,
+        };
+      }
+    } else {
+      // Custom date range
+      if (filters.dateFrom) {
+        where.createdAt = {
+          ...(where.createdAt || {}),
+          gte: filters.dateFrom,
+        };
+      }
 
-    if (filters.dateTo) {
-      where.createdAt = {
-        ...(where.createdAt || {}),
-        lte: filters.dateTo,
-      };
+      if (filters.dateTo) {
+        where.createdAt = {
+          ...(where.createdAt || {}),
+          lte: filters.dateTo,
+        };
+      }
     }
 
     return await db.order.count({ where });
@@ -109,6 +171,10 @@ export const ordersService = {
       where.paymentStatus = filters.paymentStatus;
     }
 
+    if (filters.orderSource) {
+      where.orderSource = filters.orderSource;
+    }
+
     if (filters.customerId) {
       where.userId = filters.customerId;
     }
@@ -119,18 +185,30 @@ export const ordersService = {
       };
     }
 
-    if (filters.dateFrom) {
-      where.createdAt = {
-        ...(where.createdAt || {}),
-        gte: filters.dateFrom,
-      };
-    }
+    // Handle date filtering with new options
+    if (filters.dateFilter && filters.dateFilter !== 'custom') {
+      const dateRange = getDateRange(filters.dateFilter);
+      if (dateRange) {
+        where.createdAt = {
+          gte: dateRange.from,
+          lte: dateRange.to,
+        };
+      }
+    } else {
+      // Custom date range
+      if (filters.dateFrom) {
+        where.createdAt = {
+          ...(where.createdAt || {}),
+          gte: filters.dateFrom,
+        };
+      }
 
-    if (filters.dateTo) {
-      where.createdAt = {
-        ...(where.createdAt || {}),
-        lte: filters.dateTo,
-      };
+      if (filters.dateTo) {
+        where.createdAt = {
+          ...(where.createdAt || {}),
+          lte: filters.dateTo,
+        };
+      }
     }
 
     return await db.order.findMany({
@@ -161,6 +239,22 @@ export const ordersService = {
             id: true,
             invoiceNumber: true,
           },
+        },
+        orderPayments: {
+          select: {
+            id: true,
+            paymentMethod: true,
+            amount: true,
+          },
+          take: 3, // Limit to first 3 payment methods for list view
+        },
+        checkPayments: {
+          select: {
+            id: true,
+            checkNumber: true,
+            amount: true,
+          },
+          take: 2, // Limit to first 2 checks for list view
         },
         _count: {
           select: {
@@ -214,6 +308,16 @@ export const ordersService = {
         },
         address: true,
         invoice: true,
+        orderPayments: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+        checkPayments: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
     });
   },

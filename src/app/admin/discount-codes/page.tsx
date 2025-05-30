@@ -14,18 +14,11 @@ import {
   TableBody,
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
-import DiscountCodeListActions from "@/components/admin/discount-code-list-actions";
-import Pagination from "@/components/admin/pagination";
+import { formatDate } from "@/lib/utils/currency";
+import DiscountCodeActions from "@/components/admin/discount-codes/discount-code-actions";
+import SimpleS3Image from "@/components/ui/image-upload/simple-s3-image";
 
-interface DiscountCodesPageProps {
-  searchParams: {
-    [key: string]: string | string[] | undefined;
-  };
-}
-
-export default async function DiscountCodesPage({
-  searchParams,
-}: DiscountCodesPageProps) {
+export default async function DiscountCodesPage() {
   // Check authentication
   const session = await getServerSession(authOptions);
   if (!session?.user?.shopId) {
@@ -33,63 +26,47 @@ export default async function DiscountCodesPage({
   }
   const shopId = session.user.shopId;
 
-  // Parse pagination params safely
-  const page = parseInt(String(searchParams.page) || "1");
-  const perPage = parseInt(String(searchParams.perPage) || "10");
-  const productId = searchParams.product
-    ? String(searchParams.product)
-    : undefined;
-  const userId = searchParams.user ? String(searchParams.user) : undefined;
+  // Get shop settings for currency
+  const shopSettings = await db.shopSettings.findUnique({
+    where: { shopId },
+    select: { currency: true },
+  }) || { currency: 'DT' };
 
-  // Build where clause for filtering
-  const where: any = { shopId };
-
-  // Filter by specific product if requested
-  if (productId) {
-    where.productId = productId;
-  }
-
-  // Filter by specific user if requested
-  if (userId) {
-    where.userId = userId;
-  }
-
-  // Count total discount codes for pagination
-  const totalDiscountCodes = await db.discountCode.count({
-    where,
-  });
-
-  // Calculate total pages
-  const totalPages = Math.ceil(totalDiscountCodes / perPage);
-
-  // Get discount codes with pagination
+  // Get discount codes (exclude soft deleted)
   const discountCodes = await db.discountCode.findMany({
-    where,
+    where: { 
+      shopId,
+      isDeleted: false // Only show non-deleted codes
+    },
     include: {
-      product: {
-        select: {
-          id: true,
-          name: true,
-        },
+      products: {
+        select: { id: true, name: true },
+        take: 3, // Limit to first 3 products for display
       },
-      user: {
-        select: {
-          id: true,
+      variants: {
+        select: { 
+          id: true, 
           name: true,
-          email: true,
+          product: {
+            select: { id: true, name: true }
+          }
         },
+        take: 3, // Limit to first 3 variants for display
+      },
+      category: {
+        select: { id: true, name: true },
+      },
+      users: {
+        select: { id: true, name: true, email: true },
+        take: 1, // Only show first user for display
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip: (page - 1) * perPage,
-    take: perPage,
+    orderBy: { createdAt: "desc" },
   });
 
   // Format dates for display
-  const formatDate = (date: Date | string) => {
-    return new Date(date).toLocaleDateString();
+  const formatDateForDisplay = (date: Date | string) => {
+    return formatDate(date, 'fr-FR');
   };
 
   return (
@@ -99,8 +76,8 @@ export default async function DiscountCodesPage({
           <h1 className="text-2xl font-bold tracking-tight text-gray-800">
             Discount Codes
           </h1>
-          <p className="text-gray-500 mt-1">
-            Manage promotional codes for your customers
+          <p className="text-gray-500">
+            Manage coupon codes and promotional offers
           </p>
         </div>
         <Link href="/admin/discount-codes/new">
@@ -115,10 +92,12 @@ export default async function DiscountCodesPage({
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
+              <TableHead className="text-gray-700">Image</TableHead>
               <TableHead className="text-gray-700">Code</TableHead>
-              <TableHead className="text-gray-700">Discount</TableHead>
+              <TableHead className="text-gray-700">Percentage</TableHead>
+              <TableHead className="text-gray-700">Targeting</TableHead>
+              <TableHead className="text-gray-700">Usage</TableHead>
               <TableHead className="text-gray-700">Valid Period</TableHead>
-              <TableHead className="text-gray-700">Applied To</TableHead>
               <TableHead className="text-gray-700">Status</TableHead>
               <TableHead className="text-right text-gray-700">
                 Actions
@@ -129,7 +108,7 @@ export default async function DiscountCodesPage({
             {discountCodes.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={8}
                   className="text-center py-8 text-gray-600"
                 >
                   No discount codes found.{" "}
@@ -137,7 +116,7 @@ export default async function DiscountCodesPage({
                     href="/admin/discount-codes/new"
                     className="text-indigo-600 hover:underline"
                   >
-                    Add your first discount code
+                    Create your first discount code
                   </Link>
                   .
                 </TableCell>
@@ -145,35 +124,89 @@ export default async function DiscountCodesPage({
             ) : (
               discountCodes.map((code) => (
                 <TableRow key={code.id}>
-                  <TableCell className="font-medium uppercase">
-                    {code.code}
-                  </TableCell>
-                  <TableCell>{code.percentage}% OFF</TableCell>
                   <TableCell>
-                    {formatDate(code.startDate)} to {formatDate(code.endDate)}
+                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
+                      {code.image ? (
+                        <SimpleS3Image
+                          src={code.image}
+                          alt={code.title || code.code}
+                          width={48}
+                          height={48}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center">
+                          <span className="text-purple-600 font-bold text-xs">
+                            {code.percentage}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    {code.product ? (
-                      <Link
-                        href={`/admin/products/${code.product.id}`}
-                        className="text-indigo-600 hover:underline"
-                      >
-                        {code.product.name}
-                      </Link>
-                    ) : (
-                      <span>All Products</span>
-                    )}
-                    <br />
-                    {code.user ? (
-                      <Link
-                        href={`/admin/customers/${code.user.id}`}
-                        className="text-indigo-600 hover:underline"
-                      >
-                        {code.user.name || code.user.email}
-                      </Link>
-                    ) : (
-                      <span>All Users</span>
-                    )}
+                    <div className="flex flex-col">
+                      <span className="font-mono font-medium text-indigo-600">
+                        {code.code}
+                      </span>
+                      {code.title && (
+                        <span className="text-sm text-gray-500">
+                          {code.title}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {code.percentage}%
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col space-y-1">
+                      {code.category && (
+                        <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded-full w-fit">
+                          Category: {code.category.name}
+                        </span>
+                      )}
+                      {code.products.length > 0 && (
+                        <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded-full w-fit">
+                          {code.products.length} Product{code.products.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {code.variants.length > 0 && (
+                        <span className="text-sm bg-purple-100 text-purple-800 px-2 py-1 rounded-full w-fit">
+                          {code.variants.length} Variant{code.variants.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {code.users.length > 0 && (
+                        <span className="text-sm bg-orange-100 text-orange-800 px-2 py-1 rounded-full w-fit">
+                          User: {code.users[0].name}
+                        </span>
+                      )}
+                      {!code.category && code.products.length === 0 && code.variants.length === 0 && code.users.length === 0 && (
+                        <span className="text-sm bg-gray-100 text-gray-800 px-2 py-1 rounded-full w-fit">
+                          All Products
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">
+                        {code.usedCount || 0}{code.usageLimit ? `/${code.usageLimit}` : ''} uses
+                      </span>
+                      {code.usageLimit && (
+                        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                          <div 
+                            className="bg-blue-600 h-1.5 rounded-full" 
+                            style={{ 
+                              width: `${Math.min(((code.usedCount || 0) / code.usageLimit) * 100, 100)}%` 
+                            }}
+                          ></div>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {formatDateForDisplay(code.startDate)} to{" "}
+                    {formatDateForDisplay(code.endDate)}
                   </TableCell>
                   <TableCell>
                     <span
@@ -187,7 +220,10 @@ export default async function DiscountCodesPage({
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <DiscountCodeListActions discountCodeId={code.id} />
+                    <DiscountCodeActions 
+                      codeId={code.id} 
+                      usedCount={code.usedCount}
+                    />
                   </TableCell>
                 </TableRow>
               ))
@@ -195,13 +231,6 @@ export default async function DiscountCodesPage({
           </TableBody>
         </Table>
       </div>
-
-      {/* Pagination using client component */}
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        totalItems={totalDiscountCodes}
-      />
     </div>
   );
 }

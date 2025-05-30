@@ -42,13 +42,18 @@ async function run(prisma) {
     throw new Error("No products found. Run product fixtures first.");
   }
 
-  // Clear existing orders
+  // Clear existing orders in proper order to avoid foreign key constraints
   try {
+    // Delete in order: Invoice -> OrderPayment -> CheckPayment -> OrderItem -> Order
+    await prisma.invoice.deleteMany({});
+    await prisma.orderPayment.deleteMany({}).catch(() => console.log('OrderPayment table not found - this is expected for new schema'));
+    await prisma.checkPayment.deleteMany({});
     await prisma.orderItem.deleteMany({});
     await prisma.order.deleteMany({});
+    console.log('✅ Cleared existing orders successfully');
   } catch (error) {
-    console.warn("⚠️ Warning: Failed to delete existing orders. Continuing...");
-    console.error(error);
+    console.warn('⚠️ Warning: Failed to delete some existing orders. Continuing...');
+    console.error(error.message);
   }
 
   // Generate random orders
@@ -78,15 +83,20 @@ async function run(prisma) {
     let subtotal = 0;
 
     for (let j = 0; j < itemCount; j++) {
-      // Select random product
+      // Select random product with variant
       const product = getRandomItem(products);
-
-      // Maybe select a variant
-      const hasVariant = product.variants.length > 0 && Math.random() > 0.3;
-      const variant = hasVariant ? getRandomItem(product.variants) : null;
-
-      // Calculate price and quantity
-      const price = variant ? variant.price : product.price;
+      
+      // All products should now have variants, select one
+      if (product.variants.length === 0) {
+        console.warn(`Product ${product.name} has no variants, skipping...`);
+        continue;
+      }
+      
+      const variant = getRandomItem(product.variants);
+      
+      // Calculate price and quantity from variant
+      const price = variant.price;
+      const tva = variant.tva || 19;
       const quantity = Math.floor(Math.random() * 3) + 1;
 
       // Apply a random discount (20% of the time)
@@ -104,21 +114,20 @@ async function run(prisma) {
 
       orderItems.push({
         productId: product.id,
-        variantId: variant ? variant.id : null,
+        variantId: variant.id, // Always have a variant now
         quantity,
         unitPrice,
         total: itemTotal,
         // Add new fields required by the updated schema
         productName: product.name,
-        productSku: product.sku || null,
-        productBarcode: product.barcode || null,
+        productSku: variant.sku || product.sku || null,
+        productBarcode: variant.barcode || product.barcode || null,
         productDescription: product.description || null,
-        productOptions: variant ? variant.options : null,
+        productOptions: variant.options || null,
         productImage:
-          product.images && product.images.length > 0
-            ? product.images[0]
-            : null,
-        productTva: product.tva || 19, // Default TVA if not set
+          (variant.images && variant.images.length > 0 ? variant.images[0] : null) ||
+          (product.images && product.images.length > 0 ? product.images[0] : null),
+        productTva: tva,
         discountPercentage: discountPercentage,
         discountAmount: discountAmount,
         discountCode: null,
@@ -133,12 +142,18 @@ async function run(prisma) {
       Math.random() > 0.7 ? Math.round(subtotal * 0.15 * 100) / 100 : 0; // 15% discount sometimes
     const total = subtotal + tax + shipping - discount;
 
+    // Select payment method type (mix some multi-payment orders)
+    const paymentMethodType = Math.random() > 0.7 ? null : getRandomItem(["CASH", "CHECK", "BANK_TRANSFER"]); // 30% multi-payment
+    const orderSource = getRandomItem(["ONLINE", "IN_STORE", "PHONE"]);
+
     // Create the order
     const order = await prisma.order.create({
       data: {
         orderNumber: generateOrderNumber(),
         status: getRandomItem(orderStatuses),
         paymentStatus: getRandomItem(paymentStatuses),
+        paymentMethodType, // Can be null for multi-payment orders
+        orderSource,
         subtotal,
         tax,
         shipping,
@@ -155,11 +170,44 @@ async function run(prisma) {
       },
     });
 
+    // Create payment records for multi-payment orders
+    if (!paymentMethodType && Math.random() > 0.5) {
+      // Create multiple payments for this order (cash + check example)
+      const cashAmount = Math.round(total * 0.6 * 100) / 100; // 60% cash
+      const checkAmount = Math.round((total - cashAmount) * 100) / 100; // Rest as check
+
+      // Create cash payment
+      await prisma.orderPayment.create({
+        data: {
+          orderId: order.id,
+          paymentMethod: "CASH",
+          amount: cashAmount,
+          status: "COMPLETED",
+          cashGiven: cashAmount + Math.round(Math.random() * 20 * 100) / 100, // Some change
+          cashChange: Math.max(0, (cashAmount + Math.round(Math.random() * 20 * 100) / 100) - cashAmount),
+        },
+      });
+
+      // Create check payment
+      await prisma.orderPayment.create({
+        data: {
+          orderId: order.id,
+          paymentMethod: "CHECK",
+          amount: checkAmount,
+          status: "PENDING",
+          checkNumber: `CHK${Math.floor(Math.random() * 999999)}`,
+          checkBankName: getRandomItem(["Bank ABC", "XYZ Bank", "National Bank"]),
+          checkDate: getRandomDate(),
+          checkStatus: "RECEIVED",
+        },
+      });
+
+      console.log(`  - Created multi-payment: ${cashAmount} DT cash + ${checkAmount} DT check`);
+    }
+
     orders.push(order);
     console.log(
-      `Created order: ${order.orderNumber} (${
-        order.status
-      }) - $${order.total.toFixed(2)}`
+      `Created order: ${order.orderNumber} (${order.status}) - ${total.toFixed(2)} DT`
     );
 
     // Create invoice for completed orders (for Advanced/Premium plan features)

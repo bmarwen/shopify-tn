@@ -35,6 +35,7 @@ model Shop {
   notifications   Notification[]
   subscription    Subscription?
   discountCodes   DiscountCode[]
+  checkPayments   CheckPayment[] // Track check payments
 }
 
 enum PlanType {
@@ -47,7 +48,7 @@ model ShopSettings {
   id                String   @id @default(uuid())
   shopId            String   @unique
   shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  currency          String   @default("USD")
+  currency          String   @default("DT")
   language          String   @default("en")
   timezone          String   @default("UTC")
   lowStockThreshold Int      @default(5)
@@ -78,7 +79,7 @@ model User {
   notifications        Notification[]
   resetPasswordToken   String?
   createdSubscriptions Subscription[] // Subscriptions created by this user
-  discountCodes        DiscountCode[]
+  discountCodes        DiscountCode[] @relation("DiscountCodeUsers") // Discount codes this user can use
   processedOrders      Order[]        @relation("ProcessedOrders") // Orders processed by this staff member IN_STORE
 }
 
@@ -161,6 +162,7 @@ enum PaymentMethodType {
   REMITLY
   CREDIT_CARD
   PAYPAL
+  CHECK
   OTHER
 }
 
@@ -185,6 +187,8 @@ model Category {
   parent      Category?  @relation("SubCategories", fields: [parentId], references: [id])
   children    Category[] @relation("SubCategories")
   products    Product[]  @relation("ProductCategories")
+  discounts   Discount[] // Categories can be targeted by discounts
+  discountCodes DiscountCode[] // Categories can be targeted by discount codes
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -192,92 +196,106 @@ model Category {
 }
 
 model Product {
-  id            String             @id @default(uuid())
-  name          String
-  slug          String
-  description   String?
-  price         Float
-  cost          Float?
-  tva           Float              @default(19)
-  sku           String?
-  barcode       String?
-  inventory     Int                @default(0)
-  lowStockAlert Boolean            @default(false)
-  weight        Float?
-  dimensions    Json? // {length, width, height}
-  images        String[]
-  shopId        String
-  shop          Shop               @relation(fields: [shopId], references: [id])
-  categories    Category[]         @relation("ProductCategories")
-  variants      ProductVariant[]
-  customFields  CustomFieldValue[]
-  reviews       Review[]
-  cartItems     CartItem[]
-  orderItems    OrderItem[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  expiryDate    DateTime?
+  id          String           @id @default(uuid())
+  name        String
+  slug        String
+  description String?
+  sku         String? // Optional base SKU
+  barcode     String? // Optional base barcode  
+  weight      Float?
+  dimensions  Json? // {length, width, height}
+  images      String[] // Common product images
+  shopId      String
+  shop        Shop             @relation(fields: [shopId], references: [id])
+  categories  Category[]       @relation("ProductCategories")
+  variants    ProductVariant[] // All pricing/inventory is in variants
+  reviews     Review[]
+  cartItems   CartItem[] // Will reference variants
+  orderItems  OrderItem[] // Will reference variants
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  expiryDate  DateTime?
 
-  // Add new relations
-  discounts     Discount[]
-  discountCodes DiscountCode[]
+  // Relations
+  discounts     Discount[] // Legacy single discount relation
+  multiDiscounts Discount[] @relation("DiscountProducts") // New multi-targeting relation
+  discountCodes DiscountCode[] @relation("DiscountCodeProducts")
 
   @@unique([shopId, slug])
 }
 
 model ProductVariant {
-  id         String      @id @default(uuid())
-  name       String
-  price      Float?
-  inventory  Int         @default(0)
-  sku        String?
-  barcode    String?
-  images     String[]
-  options    Json // {color: "Red", size: "XL", etc}
-  productId  String
-  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  cartItems  CartItem[]
-  orderItems OrderItem[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id           String                    @id @default(uuid())
+  name         String // Required variant name (e.g., "Red - Large")
+  price        Float // Required - each variant must have a price
+  cost         Float? // Optional cost for this variant
+  tva          Float                     @default(19) // TVA for this variant, default 19%
+  inventory    Int                       @default(0) // Stock for this specific variant
+  sku          String? // Optional SKU for this variant
+  barcode      String? // Optional barcode for this variant
+  images       String[] // Variant-specific images
+  options      Json // Required variant options {color: "Red", size: "XL", etc}
+  productId    String
+  product      Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+  customFields VariantCustomFieldValue[] // Move custom fields to variants
+  discounts    Discount[]                // Legacy single discount relation
+  multiDiscounts Discount[]             @relation("DiscountVariants") // New multi-targeting relation
+  discountCodes DiscountCode[]          @relation("DiscountCodeVariants") // Variants can be targeted by discount codes
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
 }
 
-//This feature is especially useful for shops with specialized 
-//products that need additional attributes beyond the basic ones like name, price, and description.
 model CustomField {
-  id        String             @id @default(uuid())
+  id        String                    @id @default(uuid())
   name      String
   type      String // TEXT, NUMBER, BOOLEAN, DATE, etc.
-  required  Boolean            @default(false)
+  required  Boolean                   @default(false)
   shopId    String
-  shop      Shop               @relation(fields: [shopId], references: [id])
-  values    CustomFieldValue[]
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  shop      Shop                      @relation(fields: [shopId], references: [id])
+  values    VariantCustomFieldValue[] // Update relation to variants
+  createdAt DateTime                  @default(now())
+  updatedAt DateTime                  @updatedAt
 }
 
-model CustomFieldValue {
-  id            String      @id @default(uuid())
+model VariantCustomFieldValue {
+  id            String         @id @default(uuid())
   value         String
   customFieldId String
-  customField   CustomField @relation(fields: [customFieldId], references: [id])
-  productId     String
-  product       Product     @relation(fields: [productId], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  customField   CustomField    @relation(fields: [customFieldId], references: [id])
+  variantId     String
+  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  @@unique([customFieldId, productId])
+  @@unique([customFieldId, variantId])
 }
 
 // Product Discount
 model Discount {
   id         String   @id @default(uuid())
-  percentage Float // Discount percentage
+  title      String?  // Title for the discount offer
+  description String? // Description of the discount
+  image      String?  // Image URL for the discount (S3/AWS)
+  percentage Float    // Discount percentage
   enabled    Boolean  @default(true)
   startDate  DateTime @default(now())
   endDate    DateTime
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Multi-targeting support (similar to DiscountCode)
+  products   Product[] @relation("DiscountProducts") // Target multiple products
+  variants   ProductVariant[] @relation("DiscountVariants") // Target specific variants
+  categoryId String?  // Optional: target specific category
+  category   Category? @relation(fields: [categoryId], references: [id])
+  // Legacy single product support (for backward compatibility)
+  productId  String?
+  product    Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId  String?  // Optional: target specific variant (legacy)
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  // New fields for targeting
+  availableOnline   Boolean @default(true)  // Available for online orders
+  availableInStore  Boolean @default(true)  // Available for in-store/POS orders
+  isDeleted    Boolean @default(false) // Soft delete flag
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
@@ -285,17 +303,30 @@ model Discount {
 // Discount Codes
 model DiscountCode {
   id         String   @id @default(uuid())
-  code       String // The discount code (e.g., "SUMMER10")
+  code       String   // The discount code (e.g., "SUMMER10")
+  title      String?  // Title for the discount code offer
+  description String? // Description of the discount code
+  image      String?  // Image URL for the discount code (S3/AWS)
   percentage Int      @default(10) // Discount percentage
+  usageLimit Int?     // Maximum number of times this code can be used (null = unlimited)
+  usedCount  Int      @default(0) // Number of times this code has been used
   startDate  DateTime @default(now())
   endDate    DateTime
   shopId     String
   shop       Shop     @relation(fields: [shopId], references: [id])
-  productId  String? // Optional: specific product ID (null means all products)
-  product    Product? @relation(fields: [productId], references: [id])
-  userId     String? // Optional: specific user ID (null means all users)
-  user       User?    @relation(fields: [userId], references: [id])
+  // Multi-user support
+  users      User[]   @relation("DiscountCodeUsers") // Multiple users can use this code
   isActive   Boolean  @default(true)
+  // New fields for enhanced targeting
+  availableOnline   Boolean @default(true)  // Available for online orders
+  availableInStore  Boolean @default(true)  // Available for in-store/POS orders
+  isDeleted    Boolean @default(false) // Soft delete flag
+  // Multi-targeting support
+  products   Product[] @relation("DiscountCodeProducts")
+  variants   ProductVariant[] @relation("DiscountCodeVariants") // Target specific variants
+  // Category targeting
+  categoryId String? // Optional: target specific category
+  category   Category? @relation(fields: [categoryId], references: [id])
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -312,8 +343,9 @@ model Order {
   shipping          Float
   discount          Float             @default(0)
   total             Float
+  discountCodeId    String? // Track which discount code was used
+  discountCodeValue String? // Store the actual code used
   paymentStatus     PaymentStatus     @default(PENDING)
-  paymentMethodType PaymentMethodType @default(CASH)
   orderSource       OrderSource       @default(ONLINE) // NEW FIELD
   notes             String?
   userId            String
@@ -328,6 +360,15 @@ model Order {
   invoice           Invoice?
   processedByUserId String? // Staff member who processed the order (for IN_STORE orders)
   processedBy       User?             @relation("ProcessedOrders", fields: [processedByUserId], references: [id])
+
+  // Multi-payment support
+  orderPayments OrderPayment[] // Multiple payment methods can be used for one order
+
+  // Legacy fields (kept for backward compatibility)
+  paymentMethodType PaymentMethodType? @default(CASH) // Made optional since we now use OrderPayment
+  cashAmountGiven   Float? // Amount of cash given by customer
+  cashAmountChange  Float? // Change returned to customer
+  checkPayments     CheckPayment[] // Relation to check payments
 }
 
 enum OrderStatus {
@@ -343,6 +384,58 @@ enum OrderSource {
   ONLINE // Order placed through website/e-commerce
   IN_STORE // Order placed in physical store/local POS
   PHONE // Order placed via phone call
+}
+
+// Multi-Payment Support for Orders
+model OrderPayment {
+  id            String            @id @default(uuid())
+  orderId       String
+  order         Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethodType
+  amount        Float // Amount paid with this payment method
+  status        PaymentStatus     @default(PENDING)
+  transactionId String? // External transaction reference
+  notes         String? // Payment-specific notes
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Cash payment specific fields
+  cashGiven     Float? // For cash payments: amount given by customer
+  cashChange    Float? // For cash payments: change returned
+
+  // Check payment specific fields (alternative to CheckPayment model)
+  checkNumber   String? // Check number
+  checkBankName String? // Bank name on check
+  checkDate     DateTime? // Date on check
+  checkStatus   CheckStatus? // Status of check processing
+}
+
+// Check Payment Tracking
+model CheckPayment {
+  id            String      @id @default(uuid())
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  checkNumber   String // Check number written on the check
+  bankName      String? // Bank name if available
+  amount        Float // Amount on the check
+  checkDate     DateTime // Date written on the check
+  receivedDate  DateTime    @default(now()) // When we received the check
+  depositDate   DateTime? // When the check was deposited
+  clearanceDate DateTime? // When the check cleared
+  status        CheckStatus @default(RECEIVED)
+  notes         String? // Any additional notes about the check
+  shopId        String
+  shop          Shop        @relation(fields: [shopId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+enum CheckStatus {
+  RECEIVED // Check received but not deposited
+  DEPOSITED // Check deposited at bank
+  CLEARED // Check cleared successfully
+  BOUNCED // Check bounced/returned
+  CANCELLED // Check cancelled
 }
 
 model OrderItem {
@@ -477,4 +570,18 @@ model Notification {
   shopId    String?
   shop      Shop?    @relation(fields: [shopId], references: [id])
   createdAt DateTime @default(now())
+}
+
+// System Configuration Limits
+model SystemLimit {
+  id          String   @id @default(uuid())
+  codeName    String   @unique // e.g., "STANDARD_DISCOUNTS_LIMIT", "PREMIUM_DISCOUNT_CODES_LIMIT"
+  name        String   // Human readable name
+  description String?  // Description of what this limit controls
+  value       Int      // The limit value (-1 for unlimited)
+  category    String   // e.g., "DISCOUNTS", "PRODUCTS", "ORDERS"
+  planType    PlanType? // Which plan this applies to (null means global)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

@@ -30,10 +30,13 @@ export default async function EditProductPage({
     },
     include: {
       categories: true,
-      variants: true,
-      customFields: {
+      variants: {
         include: {
-          customField: true,
+          customFields: {
+            include: {
+              customField: true,
+            },
+          },
         },
       },
     },

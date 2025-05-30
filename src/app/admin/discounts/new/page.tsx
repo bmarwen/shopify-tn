@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/prisma";
-import DiscountForm from "@/components/admin/discount-form";
+import EnhancedDiscountForm from "@/components/admin/enhanced-discount-form";
 
 export default async function NewDiscountPage() {
   // Check authentication
@@ -15,13 +15,43 @@ export default async function NewDiscountPage() {
 
   const shopId = session.user.shopId;
 
-  // Get all products for the shop (for the product dropdown)
+  // Get shop settings for currency
+  const shopSettings = await db.shopSettings.findUnique({
+    where: { shopId },
+    select: { currency: true },
+  }) || { currency: 'DT' };
+
+  // Get all products for the shop with complete variant data
   const products = await db.product.findMany({
     where: { shopId },
     select: {
       id: true,
       name: true,
-      price: true,
+      sku: true,
+      barcode: true,
+      variants: {
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          sku: true,
+          barcode: true,
+          inventory: true,
+          options: true,
+        },
+      },
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  // Get all categories for the shop
+  const categories = await db.category.findMany({
+    where: { shopId },
+    select: {
+      id: true,
+      name: true,
     },
     orderBy: {
       name: "asc",
@@ -34,7 +64,12 @@ export default async function NewDiscountPage() {
         Create New Discount
       </h1>
 
-      <DiscountForm products={products} shopId={shopId} />
+      <EnhancedDiscountForm 
+        products={products}
+        categories={categories}
+        shopId={shopId} 
+        shopSettings={shopSettings}
+      />
     </div>
   );
 }

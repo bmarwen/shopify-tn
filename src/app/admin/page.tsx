@@ -85,11 +85,30 @@ export default async function AdminDashboardPage() {
     take: 5,
   });
 
-  // Get low stock products
+  // Get low stock products based on variants
   const lowStockProducts = await db.product.findMany({
     where: {
       shopId,
-      lowStockAlert: true,
+      variants: {
+        some: {
+          inventory: {
+            lte: shop.settings?.lowStockThreshold || 5,
+          },
+        },
+      },
+    },
+    include: {
+      variants: {
+        where: {
+          inventory: {
+            lte: shop.settings?.lowStockThreshold || 5,
+          },
+        },
+        orderBy: {
+          inventory: 'asc',
+        },
+        take: 1, // Get the variant with lowest stock
+      },
     },
     take: 5,
   });
@@ -188,7 +207,7 @@ export default async function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatCurrency(totalRevenue)}
+                {formatCurrency(totalRevenue, "DT")}
               </div>
               <p className="text-xs text-gray-500">
                 Total from {orderCount} orders
@@ -219,7 +238,7 @@ export default async function AdminDashboardPage() {
                         </p>
                       </div>
                       <div className="ml-auto font-medium">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(order.total, "DT")}
                       </div>
                     </div>
                   ))
@@ -244,11 +263,12 @@ export default async function AdminDashboardPage() {
                           {product.name}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {product.inventory} units left
+                          {product.variants[0]?.inventory || 0} units left
+                          {product.variants[0] && ` (${product.variants[0].name})`}
                         </p>
                       </div>
                       <div className="ml-auto font-medium">
-                        {formatCurrency(product.price)}
+                        {product.variants[0] ? formatCurrency(product.variants[0].price, "DT") : 'No price'}
                       </div>
                     </div>
                   ))

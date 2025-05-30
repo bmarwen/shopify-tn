@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatCurrency } from "@/lib/utils";
+import { getImageUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -57,16 +58,27 @@ interface ProductCounts {
   orderItems: number;
 }
 
+interface ProductVariant {
+  id: string;
+  name: string;
+  price: number;
+  cost?: number;
+  tva: number;
+  inventory: number;
+  sku?: string;
+  barcode?: string;
+  options: Record<string, any>;
+}
+
 interface Product {
   id: string;
   name: string;
   description?: string;
-  price: number;
   sku?: string;
   barcode?: string;
-  inventory: number;
   images: string[];
   categories: Category[];
+  variants: ProductVariant[];
   _count: ProductCounts;
   discounts: Array<{
     id: string;
@@ -80,8 +92,30 @@ export default function ProductsPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  // Store the previous search params to prevent unnecessary refetching
-  const prevSearchParamsRef = useRef<string>("");
+  // Utility functions for variant-based calculations
+  const getProductPrice = (product: Product) => {
+    if (!product.variants || product.variants.length === 0) return 0;
+    const prices = product.variants.map(v => v.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    return minPrice === maxPrice ? minPrice : minPrice; // Show min price
+  };
+
+  const getProductInventory = (product: Product) => {
+    if (!product.variants || product.variants.length === 0) return 0;
+    return product.variants.reduce((total, variant) => total + variant.inventory, 0);
+  };
+
+  const getProductPriceDisplay = (product: Product) => {
+    if (!product.variants || product.variants.length === 0) return "No variants";
+    const prices = product.variants.map(v => v.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    if (minPrice === maxPrice) {
+      return formatCurrency(minPrice, "DT");
+    }
+    return `${formatCurrency(minPrice, "DT")} - ${formatCurrency(maxPrice, "DT")}`;
+  };
 
   // State variables
   const [isLoading, setIsLoading] = useState(true);
@@ -95,7 +129,7 @@ export default function ProductsPage() {
     lowStockCount: 0,
     outOfStockCount: 0,
   });
-  const [fetchAttempted, setFetchAttempted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Parse query parameters
   const page = parseInt(searchParams.get("page") || "1");
@@ -108,8 +142,78 @@ export default function ProductsPage() {
   const lowStock = searchParams.get("lowStock") === "true";
   const viewMode = searchParams.get("view") || "list";
 
-  // Create a serialized string of the current search params
-  const currentSearchParams = JSON.stringify({
+  // Fetch data effect
+  useEffect(() => {
+    if (status === "loading" || !session?.user?.shopId) {
+      return;
+    }
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Fetch categories and products in parallel
+        const [categoriesResponse, productsResponse] = await Promise.allSettled([
+          categories.length === 0 ? fetch("/api/categories") : Promise.resolve(null),
+          apiClient.products.getProducts({
+            page,
+            perPage,
+            sort,
+            order,
+            search,
+            category: categoryId,
+            inStock: inStock ? "true" : undefined,
+            lowStock: lowStock ? "true" : undefined,
+            view: viewMode,
+          }),
+        ]);
+
+        // Handle categories response
+        if (categoriesResponse.status === "fulfilled" && categoriesResponse.value) {
+          try {
+            if (categoriesResponse.value.ok) {
+              const categoriesData = await categoriesResponse.value.json();
+              setCategories(categoriesData);
+            } else {
+              console.warn("Failed to fetch categories:", categoriesResponse.value.statusText);
+            }
+          } catch (error) {
+            console.warn("Error parsing categories:", error);
+          }
+        }
+
+        // Handle products response
+        if (productsResponse.status === "fulfilled") {
+          const data = productsResponse.value;
+          setProducts(data.products || []);
+          setTotalProducts(data.pagination?.total || 0);
+          setTotalPages(data.pagination?.totalPages || 1);
+          setLowStockThreshold(data.filter?.lowStockThreshold || 5);
+          setProductStats(data.stats || {
+            totalInventory: 0,
+            lowStockCount: 0,
+            outOfStockCount: 0,
+          });
+        } else {
+          throw new Error(productsResponse.reason?.message || "Failed to fetch products");
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setError(error instanceof Error ? error.message : "Failed to load products");
+        toast({
+          title: "Error",
+          description: "Failed to load products",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [
+    status,
+    session?.user?.shopId,
     page,
     perPage,
     sort,
@@ -119,85 +223,7 @@ export default function ProductsPage() {
     inStock,
     lowStock,
     viewMode,
-  });
-
-  // Fetch data effect
-  useEffect(() => {
-    // Only run if we have an active session and search params have changed
-    if (status === "loading" || !session?.user?.shopId || fetchAttempted) {
-      return;
-    }
-
-    // Compare with previous search params
-    if (prevSearchParamsRef.current === currentSearchParams) {
-      return;
-    }
-    setFetchAttempted(true);
-
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        // Fetch categories only once
-        if (categories.length === 0) {
-          try {
-            const categoriesResponse = await fetch("/api/categories");
-            if (categoriesResponse.ok) {
-              const categoriesData = await categoriesResponse.json();
-              setCategories(categoriesData);
-            } else {
-              console.error(
-                "Failed to fetch categories:",
-                categoriesResponse.statusText
-              );
-              setCategories([]);
-            }
-          } catch (error) {
-            console.error("Error fetching categories:", error);
-            setCategories([]);
-          }
-        }
-
-        // Fetch products
-        const productsResponse = await apiClient.products.getProducts({
-          page,
-          perPage,
-          sort,
-          order,
-          search,
-          category: categoryId,
-          inStock: inStock ? "true" : undefined,
-          lowStock: lowStock ? "true" : undefined,
-          view: viewMode,
-        });
-
-        setProducts(productsResponse.products);
-        setTotalProducts(productsResponse.pagination.total);
-        setTotalPages(productsResponse.pagination.totalPages);
-        setLowStockThreshold(productsResponse.filter.lowStockThreshold);
-        setProductStats(productsResponse.stats);
-
-        // Update previous search params
-        prevSearchParamsRef.current = currentSearchParams;
-      } catch (error) {
-        console.error("Error fetching products:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load products",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-        setFetchAttempted(false);
-      }
-    };
-
-    fetchData();
-  }, [
-    session,
-    status,
-    currentSearchParams,
     categories.length,
-    fetchAttempted,
     toast,
   ]);
 
@@ -381,24 +407,22 @@ export default function ProductsPage() {
                       <TableRow key={product.id} className="hover:bg-gray-50">
                         <TableCell>
                           <div className="flex items-center space-x-3">
-                            <div className="flex-shrink-0 h-10 w-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                            <div className="flex-shrink-0 h-10 w-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
                               {product.images && product.images[0] ? (
-                                <div className="relative h-full w-full">
-                                  <Image
-                                    src={product.images[0]}
-                                    alt={product.name}
-                                    width={40}
-                                    height={40}
-                                    className="object-cover"
-                                    unoptimized
-                                    onError={(e) =>
-                                      (e.currentTarget.src = "/placeholder.jpg")
-                                    }
-                                  />
-                                </div>
+                                <Image
+                                  src={getImageUrl(product.images[0])}
+                                  alt={product.name}
+                                  width={40}
+                                  height={40}
+                                  className="object-cover object-center w-full h-full"
+                                  unoptimized
+                                  onError={(e) => {
+                                    e.currentTarget.src = "/images/placeholder.svg";
+                                  }}
+                                />
                               ) : (
-                                <div className="text-gray-400 text-xs">
-                                  No image
+                                <div className="text-gray-400 text-xs flex items-center justify-center w-full h-full">
+                                  <ImageIcon className="h-4 w-4" />
                                 </div>
                               )}
                             </div>
@@ -418,7 +442,7 @@ export default function ProductsPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-gray-700">
-                          {formatCurrency(product.price)}
+                          {getProductPriceDisplay(product)}
                           {product.discounts &&
                             product.discounts.length > 0 && (
                               <div className="text-xs text-green-500">
@@ -427,23 +451,33 @@ export default function ProductsPage() {
                             )}
                         </TableCell>
                         <TableCell>
-                          <span
-                            className={
-                              product.inventory <= 0
-                                ? "text-red-500 font-medium"
-                                : product.inventory <= lowStockThreshold
-                                ? "text-amber-500 font-medium"
-                                : "text-gray-200"
-                            }
-                          >
-                            {product.inventory}
-                          </span>
-                          {product.inventory <= lowStockThreshold &&
-                            product.inventory > 0 && (
-                              <span className="ml-2 text-xs text-amber-500">
-                                (Low)
+                          {(() => {
+                            const totalInventory = getProductInventory(product);
+                            return (
+                              <span
+                                className={
+                                  totalInventory <= 0
+                                    ? "text-red-500 font-medium"
+                                    : totalInventory <= lowStockThreshold
+                                    ? "text-amber-500 font-medium"
+                                    : "text-gray-700"
+                                }
+                              >
+                                {totalInventory}
                               </span>
-                            )}
+                            );
+                          })()
+                          }
+                          {(() => {
+                            const totalInventory = getProductInventory(product);
+                            return totalInventory <= lowStockThreshold &&
+                              totalInventory > 0 && (
+                                <span className="ml-2 text-xs text-amber-500">
+                                  (Low)
+                                </span>
+                              );
+                          })()
+                          }
                         </TableCell>
                         <TableCell className="text-gray-700">
                           <div className="flex flex-wrap gap-1">
@@ -574,11 +608,14 @@ export default function ProductsPage() {
                       {product.images && product.images[0] ? (
                         <div className="relative h-full w-full">
                           <Image
-                            src={product.images[0]}
+                            src={getImageUrl(product.images[0])}
                             alt={product.name}
                             fill
-                            className="object-cover"
+                            className="object-cover object-center"
                             unoptimized
+                            onError={(e) => {
+                              e.currentTarget.src = '/images/placeholder.svg';
+                            }}
                           />
                         </div>
                       ) : (
@@ -596,23 +633,31 @@ export default function ProductsPage() {
 
                       {/* Inventory status */}
                       <div className="absolute bottom-2 right-2">
-                        {product.inventory <= 0 ? (
-                          <Badge variant="destructive">Out of stock</Badge>
-                        ) : product.inventory <= lowStockThreshold ? (
-                          <Badge
-                            variant="outline"
-                            className="bg-amber-100 text-amber-800 border-amber-200"
-                          >
-                            Low stock: {product.inventory}
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="bg-green-100 text-green-800 border-green-200"
-                          >
-                            In stock: {product.inventory}
-                          </Badge>
-                        )}
+                        {(() => {
+                          const totalInventory = getProductInventory(product);
+                          if (totalInventory <= 0) {
+                            return <Badge variant="destructive">Out of stock</Badge>;
+                          } else if (totalInventory <= lowStockThreshold) {
+                            return (
+                              <Badge
+                                variant="outline"
+                                className="bg-amber-100 text-amber-800 border-amber-200"
+                              >
+                                Low stock: {totalInventory}
+                              </Badge>
+                            );
+                          } else {
+                            return (
+                              <Badge
+                                variant="outline"
+                                className="bg-green-100 text-green-800 border-green-200"
+                              >
+                                In stock: {totalInventory}
+                              </Badge>
+                            );
+                          }
+                        })()
+                        }
                       </div>
                     </div>
                     <CardContent className="p-4">
@@ -626,7 +671,7 @@ export default function ProductsPage() {
                       </h3>
                       <div className="flex justify-between items-center mb-2">
                         <div className="text-gray-400 font-medium">
-                          {formatCurrency(product.price)}
+                          {getProductPriceDisplay(product)}
                         </div>
                         <div className="text-xs text-gray-400">
                           {product._count &&

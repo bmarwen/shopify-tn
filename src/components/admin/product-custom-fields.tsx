@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash, Plus, ChevronDown, ChevronUp, Calendar } from "lucide-react";
+import { Trash, Plus, ChevronDown, ChevronUp, Calendar, RefreshCw, Search } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -27,6 +27,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useToast } from "@/components/ui/use-toast";
 
 // Structure matching the database model
 interface CustomFieldValue {
@@ -47,23 +48,50 @@ interface ProductCustomFieldsProps {
   customFieldValues: CustomFieldValue[];
   availableCustomFields: AvailableCustomField[];
   onChange: (fields: CustomFieldValue[]) => void;
+  onRefreshCustomFields?: () => Promise<void>; // Optional callback to refresh custom fields
 }
 
 export default function ProductCustomFields({
   customFieldValues = [],
   availableCustomFields = [],
   onChange,
+  onRefreshCustomFields,
 }: ProductCustomFieldsProps) {
+  const { toast } = useToast();
   const [localFieldValues, setLocalFieldValues] =
     useState<CustomFieldValue[]>(customFieldValues);
   const [selectedCustomFieldId, setSelectedCustomFieldId] =
     useState<string>("");
   const [isOpen, setIsOpen] = useState<boolean>(true); // Open by default
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Sync with parent component when props change
   useEffect(() => {
     setLocalFieldValues(customFieldValues);
   }, [customFieldValues]);
+
+  // Handle refresh custom fields
+  const handleRefreshCustomFields = async () => {
+    if (!onRefreshCustomFields) return;
+    
+    setIsRefreshing(true);
+    try {
+      await onRefreshCustomFields();
+      toast({
+        title: "Custom Fields Refreshed",
+        description: "Successfully loaded the latest custom fields",
+      });
+    } catch (error) {
+      toast({
+        title: "Refresh Failed",
+        description: "Failed to refresh custom fields. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Add a custom field value
   const handleAddCustomField = () => {
@@ -108,10 +136,13 @@ export default function ProductCustomFields({
     onChange(updatedFields);
   };
 
-  // Filter out already added custom fields
+  // Filter out already added custom fields and apply search filter
   const availableFieldsToAdd = availableCustomFields.filter(
-    (field) =>
-      !localFieldValues.some((value) => value.customFieldId === field.id)
+    (field) => {
+      const notAlreadyAdded = !localFieldValues.some((value) => value.customFieldId === field.id);
+      const matchesSearch = !searchTerm || field.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return notAlreadyAdded && matchesSearch;
+    }
   );
 
   // Get field name from ID
@@ -345,11 +376,33 @@ export default function ProductCustomFields({
             <h3 className="text-lg font-medium" style={{ color: "#2c3e50" }}>
               Add Custom Field
             </h3>
-            {isOpen ? (
-              <ChevronUp className="h-5 w-5 text-gray-500" />
-            ) : (
-              <ChevronDown className="h-5 w-5 text-gray-500" />
-            )}
+            <div className="flex items-center gap-2">
+              {onRefreshCustomFields && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRefreshCustomFields();
+                  }}
+                  disabled={isRefreshing}
+                  className="text-xs"
+                  style={{
+                    borderColor: "#16a085",
+                    color: "#16a085",
+                  }}
+                >
+                  <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                </Button>
+              )}
+              {isOpen ? (
+                <ChevronUp className="h-5 w-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-500" />
+              )}
+            </div>
           </div>
         </CollapsibleTrigger>
         <CollapsibleContent
@@ -382,6 +435,25 @@ export default function ProductCustomFields({
                 Select a custom field to add additional information to this
                 product.
               </p>
+              
+              {/* Search input for custom fields */}
+              {availableCustomFields.length > 5 && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search custom fields..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 border-2"
+                    style={{
+                      borderColor: "#bdc3c7",
+                      color: "#2c3e50",
+                      backgroundColor: "white",
+                    }}
+                  />
+                </div>
+              )}
+              
               <div className="flex gap-2">
                 <div className="flex-1">
                   <Select

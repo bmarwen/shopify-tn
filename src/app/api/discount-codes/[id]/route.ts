@@ -24,10 +24,18 @@ export async function GET(
       where: {
         id: discountCodeId,
         shopId,
+        isDeleted: false, // Don't show soft deleted codes
       },
       include: {
-        product: {
+        products: {
           select: {
+            id: true,
+            name: true,
+          },
+        },
+        category: {
+          select: {
+            id: true,
             name: true,
           },
         },
@@ -78,12 +86,20 @@ export async function PUT(
     const body = await req.json();
     const {
       code,
+      title,
+      description,
+      image,
       percentage,
       startDate,
       endDate,
-      productId,
+      targetType,
+      productIds = [],
+      categoryId,
       userId,
+      usageLimit,
       isActive,
+      availableOnline,
+      availableInStore,
     } = body;
 
     // Verify the discount code exists and belongs to this shop
@@ -91,6 +107,7 @@ export async function PUT(
       where: {
         id: discountCodeId,
         shopId,
+        isDeleted: false, // Don't allow updating soft deleted codes
       },
     });
 
@@ -98,6 +115,14 @@ export async function PUT(
       return NextResponse.json(
         { error: "Discount code not found" },
         { status: 404 }
+      );
+    }
+
+    // Validate at least one availability option is selected if both are provided
+    if (availableOnline !== undefined && availableInStore !== undefined && !availableOnline && !availableInStore) {
+      return NextResponse.json(
+        { error: "At least one availability option (Online or In-Store) must be selected" },
+        { status: 400 }
       );
     }
 
@@ -124,25 +149,36 @@ export async function PUT(
       }
     }
 
-    // Verify the product belongs to this shop if it's being changed
-    if (productId && productId !== existingCode.productId) {
-      const product = await db.product.findUnique({
-        where: {
-          id: productId,
-          shopId,
-        },
+    // Verify products belong to this shop if they're being changed
+    if (targetType === "products" && productIds.length > 0) {
+      const productCount = await db.product.count({
+        where: { id: { in: productIds }, shopId },
       });
-
-      if (!product) {
+      
+      if (productCount !== productIds.length) {
         return NextResponse.json(
-          { error: "Product not found" },
-          { status: 404 }
+          { error: "Some products don't belong to your shop" },
+          { status: 400 }
         );
       }
     }
 
-    // Verify the user belongs to this shop if it's being changed
-    if (userId && userId !== existingCode.userId) {
+    // Verify category belongs to shop if provided
+    if (targetType === "category" && categoryId) {
+      const category = await db.category.findFirst({
+        where: { id: categoryId, shopId },
+      });
+      
+      if (!category) {
+        return NextResponse.json(
+          { error: "Category not found or doesn't belong to your shop" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Verify the user belongs to this shop if provided
+    if (targetType === "user" && userId) {
       const user = await db.user.findUnique({
         where: {
           id: userId,
@@ -160,12 +196,32 @@ export async function PUT(
       where: { id: discountCodeId },
       data: {
         code: code ? code.toUpperCase() : undefined,
+        title: title !== undefined ? title || null : undefined,
+        description: description !== undefined ? description || null : undefined,
+        image: image !== undefined ? image || null : undefined,
         percentage: percentage !== undefined ? parseInt(percentage) : undefined,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
-        productId: productId === undefined ? undefined : productId || null,
-        userId: userId === undefined ? undefined : userId || null,
+        categoryId: targetType === "category" ? categoryId : null,
+        userId: targetType === "user" ? userId : null,
+        usageLimit: usageLimit !== undefined ? usageLimit || null : undefined,
         isActive: isActive !== undefined ? isActive === true : undefined,
+        availableOnline: availableOnline !== undefined ? availableOnline : undefined,
+        availableInStore: availableInStore !== undefined ? availableInStore : undefined,
+        products: targetType === "products" && productIds.length > 0 ? {
+          set: productIds.map((id: string) => ({ id }))
+        } : targetType === "products" ? { set: [] } : undefined,
+      },
+      include: {
+        products: {
+          select: { id: true, name: true },
+        },
+        category: {
+          select: { id: true, name: true },
+        },
+        user: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
 
@@ -179,7 +235,7 @@ export async function PUT(
   }
 }
 
-// DELETE a discount code
+// DELETE a discount code (soft delete only)
 export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -203,6 +259,7 @@ export async function DELETE(
       where: {
         id: discountCodeId,
         shopId,
+        isDeleted: false, // Don't allow deleting already deleted codes
       },
     });
 
@@ -213,12 +270,23 @@ export async function DELETE(
       );
     }
 
-    // Delete the discount code
-    await db.discountCode.delete({
+    // Always soft delete - mark as deleted and deactivate
+    await db.discountCode.update({
       where: { id: discountCodeId },
+      data: {
+        isDeleted: true,
+        isActive: false, // Deactivate to prevent further use
+      },
     });
 
-    return NextResponse.json({ success: true });
+    const message = discountCode.usedCount > 0 
+      ? `Discount code deleted successfully. Order history has been preserved for analytics.`
+      : "Discount code deleted successfully.";
+
+    return NextResponse.json({ 
+      success: true, 
+      message 
+    });
   } catch (error) {
     console.error("Error deleting discount code:", error);
     return NextResponse.json(

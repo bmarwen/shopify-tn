@@ -17,11 +17,16 @@ async function runFixtures() {
   // Run fixtures sequentially in a specific order
   // This is important because some fixtures might depend on others
   const fixtureOrder = [
-    "shops.js",
+    "shops.js",           // Must be first
+    "planPricing.js",     // Depends on shops
     "users.js",
+    "subscriptions.js",   // Depends on planPricing
     "categories.js",
     "products.js",
+    "systemLimits.js",    // Add system limits
+    "discounts.js",       // Add discounts (depends on products)
     "orders.js",
+    "advancedShop.js",    // Advanced shop setup
     // Add other fixtures in the order they should run
   ];
 

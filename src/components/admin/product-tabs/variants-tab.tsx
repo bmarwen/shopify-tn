@@ -11,15 +11,28 @@ import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import ProductVariantsForm from "../product-variants-form";
 import { ProductFormValues } from "../product-form-types";
 
+interface CustomField {
+  id: string;
+  name: string;
+  type: string;
+  required: boolean;
+}
+
 interface VariantsTabProps {
   control: Control<ProductFormValues>;
   onFormStateChange: (field: string, value: any) => void;
+  customFields?: CustomField[];
+  onRefreshCustomFields?: () => Promise<void>;
 }
 
 export default function VariantsTab({
   control,
   onFormStateChange,
+  customFields = [],
+  onRefreshCustomFields,
 }: VariantsTabProps) {
+  console.log("VariantsTab - customFields received:", customFields);
+  
   return (
     <Card className="border-0 shadow">
       <CardHeader
@@ -43,11 +56,13 @@ export default function VariantsTab({
               <FormControl>
                 <ProductVariantsForm
                   variants={field.value}
+                  customFields={customFields}
                   onChange={(variants) => {
                     field.onChange(variants);
                     // Update the parent form state
                     onFormStateChange("variants", variants);
                   }}
+                  onRefreshCustomFields={onRefreshCustomFields}
                 />
               </FormControl>
             </FormItem>

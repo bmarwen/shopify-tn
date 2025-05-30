@@ -1,13 +1,12 @@
-// src/app/admin/orders/[id]/page.tsx
 import { getServerSession } from "next-auth/next";
 import Link from "next/link";
-import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { ordersService } from "@/lib/services/orders.service";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getImageUrl } from "@/lib/utils";
 import { FeatureGuard } from "@/components/authorization/feature-guard";
 import { Feature } from "@/lib/feature-authorization";
+import OrderItemImage from "@/components/admin/order-item-image";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +41,8 @@ import {
   PackageCheck,
   Notebook,
   BookOpenText,
+  Receipt,
+  DollarSign,
 } from "lucide-react";
 
 interface OrderDetailsPageProps {
@@ -98,14 +99,14 @@ export default async function OrderDetailsPage({
         <div className="flex items-center gap-4">
           <FeatureGuard feature={Feature.INVOICE_GENERATION}>
             {order.invoice ? (
-              <Button asChild variant="outline">
+              <Button variant="outline">
                 <Link href={`/api/orders/${order.id}/invoice`} target="_blank">
                   <FileText className="h-4 w-4 mr-2" />
                   View Invoice
                 </Link>
               </Button>
             ) : (
-              <Button asChild>
+              <Button>
                 <Link href={`/api/orders/${order.id}/invoice/generate`}>
                   <FileText className="h-4 w-4 mr-2" />
                   Generate Invoice
@@ -150,17 +151,17 @@ export default async function OrderDetailsPage({
                     <TableRow key={item.id}>
                       <TableCell>
                         <div className="flex items-center space-x-3">
-                          <div className="flex-shrink-0 h-10 w-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                          <div className="flex-shrink-0 h-10 w-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
                             {item.productImage ? (
-                              <Image
-                                src={item.productImage}
+                              <OrderItemImage
+                                src={getImageUrl(item.productImage)}
                                 alt={item.productName}
                                 width={40}
                                 height={40}
-                                className="object-cover"
+                                className="object-cover object-center w-full h-full"
                               />
                             ) : (
-                              <div className="text-gray-400 text-xs">
+                              <div className="text-gray-400 text-xs flex items-center justify-center w-full h-full">
                                 No image
                               </div>
                             )}
@@ -370,7 +371,7 @@ export default async function OrderDetailsPage({
                 </div>
               </CardHeader>
               <CardContent className="p-4 bg-gray-900">
-                <div className="space-y-1 text-gray-400">
+                <div className="space-y-1 text-gray-200">
                   <div>{order.address.line1}</div>
                   {order.address.line2 && <div>{order.address.line2}</div>}
                   <div>
@@ -389,18 +390,13 @@ export default async function OrderDetailsPage({
               <div className="flex items-center">
                 <CreditCard className="h-4 w-4 mr-2 text-gray-500" />
                 <CardTitle className="text-base text-gray-800">
-                  <span className="text-gray-700">Payment Info</span>
+                  <span className="text-gray-700">Payment Details</span>
                 </CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-4 bg-gray-900">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-200">Payment Method</span>
-                  <span className="text-gray-300 font-medium">
-                    {order.paymentMethodType || "Standard Payment"}
-                  </span>
-                </div>
+              <div className="space-y-4">
+                {/* Payment Status */}
                 <div className="flex justify-between">
                   <span className="text-gray-200">Payment Status</span>
                   <OrderStatusBadge
@@ -408,6 +404,172 @@ export default async function OrderDetailsPage({
                     type="payment"
                   />
                 </div>
+                
+                {/* Payment Methods Used */}
+                {order.orderPayments && order.orderPayments.length > 0 ? (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-200 mb-3 flex items-center">
+                      <DollarSign className="h-4 w-4 mr-1" />
+                      Payment Methods ({order.orderPayments.length})
+                    </h4>
+                    <div className="space-y-3">
+                      {order.orderPayments.map((payment, index) => (
+                        <div key={payment.id} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              {payment.paymentMethod === 'CASH' && <Banknote className="h-4 w-4 text-green-500" />}
+                              {payment.paymentMethod === 'CREDIT_CARD' && <CreditCard className="h-4 w-4 text-blue-500" />}
+                              {payment.paymentMethod === 'CHECK' && <Receipt className="h-4 w-4 text-purple-500" />}
+                              <span className="text-gray-200 font-medium">
+                                {payment.paymentMethod.replace('_', ' ')}
+                              </span>
+                            </div>
+                            <span className="text-gray-100 font-bold">
+                              {formatCurrency(payment.amount)}
+                            </span>
+                          </div>
+                          
+                          {/* Cash Payment Details */}
+                          {payment.paymentMethod === 'CASH' && payment.cashGiven && (
+                            <div className="text-xs text-gray-400 space-y-1">
+                              <div className="flex justify-between">
+                                <span>Cash Given:</span>
+                                <span>{formatCurrency(payment.cashGiven)}</span>
+                              </div>
+                              {payment.cashChange && payment.cashChange > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Change Returned:</span>
+                                  <span>{formatCurrency(payment.cashChange)}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Check Payment Details */}
+                          {payment.paymentMethod === 'CHECK' && (
+                            <div className="text-xs text-gray-400 space-y-1">
+                              {payment.checkNumber && (
+                                <div className="flex justify-between">
+                                  <span>Check Number:</span>
+                                  <span className="font-mono">{payment.checkNumber}</span>
+                                </div>
+                              )}
+                              {payment.checkBankName && (
+                                <div className="flex justify-between">
+                                  <span>Bank:</span>
+                                  <span>{payment.checkBankName}</span>
+                                </div>
+                              )}
+                              {payment.checkDate && (
+                                <div className="flex justify-between">
+                                  <span>Check Date:</span>
+                                  <span>{formatDate(payment.checkDate)}</span>
+                                </div>
+                              )}
+                              {payment.checkStatus && (
+                                <div className="flex justify-between">
+                                  <span>Status:</span>
+                                  <span className={`capitalize ${
+                                    payment.checkStatus === 'CLEARED' ? 'text-green-400' :
+                                    payment.checkStatus === 'BOUNCED' ? 'text-red-400' :
+                                    payment.checkStatus === 'DEPOSITED' ? 'text-blue-400' :
+                                    'text-yellow-400'
+                                  }`}>
+                                    {payment.checkStatus.toLowerCase()}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Payment Notes */}
+                          {payment.notes && (
+                            <div className="text-xs text-gray-400 mt-2">
+                              <span className="font-medium">Notes:</span> {payment.notes}
+                            </div>
+                          )}
+                          
+                          {/* Transaction ID */}
+                          {payment.transactionId && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              <span className="font-medium">Transaction ID:</span>
+                              <span className="font-mono ml-1">{payment.transactionId}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Legacy Payment Info */
+                  <div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-200">Payment Method</span>
+                      <span className="text-gray-300 font-medium">
+                        {order.paymentMethodType?.replace('_', ' ') || "Standard Payment"}
+                      </span>
+                    </div>
+                    
+                    {/* Cash Payment Legacy */}
+                    {order.paymentMethodType === 'CASH' && (
+                      <div className="space-y-1 text-xs text-gray-400">
+                        {order.cashAmountGiven && (
+                          <div className="flex justify-between">
+                            <span>Cash Given:</span>
+                            <span>{formatCurrency(order.cashAmountGiven)}</span>
+                          </div>
+                        )}
+                        {order.cashAmountChange && order.cashAmountChange > 0 && (
+                          <div className="flex justify-between">
+                            <span>Change Returned:</span>
+                            <span>{formatCurrency(order.cashAmountChange)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Check Payments (Legacy) */}
+                {order.checkPayments && order.checkPayments.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-200 mb-3 flex items-center">
+                      <Receipt className="h-4 w-4 mr-1" />
+                      Check Payments ({order.checkPayments.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {order.checkPayments.map((check, index) => (
+                        <div key={check.id} className="p-2 bg-gray-800 rounded border border-gray-700">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-gray-200 font-medium">Check #{check.checkNumber}</span>
+                            <span className="text-gray-100 font-bold">{formatCurrency(check.amount)}</span>
+                          </div>
+                          <div className="text-xs text-gray-400 space-y-1">
+                            {check.bankName && (
+                              <div>Bank: {check.bankName}</div>
+                            )}
+                            <div>Date: {formatDate(check.checkDate)}</div>
+                            <div className="flex justify-between">
+                              <span>Status:</span>
+                              <span className={`capitalize ${
+                                check.status === 'CLEARED' ? 'text-green-400' :
+                                check.status === 'BOUNCED' ? 'text-red-400' :
+                                check.status === 'DEPOSITED' ? 'text-blue-400' :
+                                'text-yellow-400'
+                              }`}>
+                                {check.status.toLowerCase()}
+                              </span>
+                            </div>
+                            {check.notes && (
+                              <div>Notes: {check.notes}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 <Separator className="my-2" />
                 <div className="flex justify-between font-medium">
                   <span className="text-gray-200">Total Paid</span>
@@ -445,7 +607,7 @@ export default async function OrderDetailsPage({
                         {formatDate(order.invoice.createdAt)}
                       </span>
                     </div>
-                    <Button size="sm" className="w-full mt-2" asChild>
+                    <Button size="sm" className="w-full mt-2">
                       <Link
                         href={`/api/orders/${order.id}/invoice`}
                         target="_blank"
@@ -459,7 +621,7 @@ export default async function OrderDetailsPage({
                     <p className="text-gray-600 mb-3">
                       No invoice generated yet
                     </p>
-                    <Button size="sm" className="w-full" asChild>
+                    <Button size="sm" className="w-full">
                       <Link href={`/api/orders/${order.id}/invoice/generate`}>
                         Generate Invoice
                       </Link>

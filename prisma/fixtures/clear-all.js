@@ -1,55 +1,66 @@
-// prisma/fixtures/clear-all.js
-const { PrismaClient } = require("@prisma/client");
+// Clear all data from database in proper order
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-/**
- * Clears all data from the database without dropping the schema
- * Deletes in the correct order to avoid foreign key constraint errors
- */
-async function clearAllData() {
-  console.log("🧹 Clearing all data from the database...");
-
+async function clearAll() {
+  console.log('🗑️ Clearing all data from database...');
+  
   try {
-    // Delete in order of dependencies (children first, then parents)
+    // Clear in proper order to respect foreign key constraints
+    const tables = [
+      'invoice',
+      'orderPayment', // New table
+      'checkPayment',
+      'orderItem',
+      'order',
+      'subscriptionPayment',
+      'subscription', // Must be before users
+      'cartItem',
+      'cart',
+      'review',
+      'variantCustomFieldValue',
+      'discount', // Clear discounts before variants and products
+      'productVariant',
+      'product',
+      'customField',
+      'discountCode',
+      'address',
+      'notification',
+      'user', // After subscription
+      'paymentMethod',
+      'shippingMethod',
+      'shopSettings',
+      'category',
+      'shop',
+      'planPricing',
+      'systemLimit' // Add system limits
+    ];
 
-    // Order related
-    await prisma.orderItem.deleteMany({});
-    await prisma.invoice.deleteMany({});
-    await prisma.order.deleteMany({});
-
-    // Cart related
-    await prisma.cartItem.deleteMany({});
-    await prisma.cart.deleteMany({});
-
-    // Product related
-    await prisma.productVariant.deleteMany({});
-    await prisma.customFieldValue.deleteMany({});
-    await prisma.review.deleteMany({});
-    await prisma.product.deleteMany({});
-
-    // Categories
-    await prisma.category.deleteMany({});
-
-    // User related
-    await prisma.address.deleteMany({});
-    await prisma.notification.deleteMany({});
-    await prisma.user.deleteMany({});
-
-    // Shop related
-    await prisma.paymentMethod.deleteMany({});
-    await prisma.shippingMethod.deleteMany({});
-    await prisma.customField.deleteMany({});
-    await prisma.shopSettings.deleteMany({});
-    await prisma.shop.deleteMany({});
-
-    console.log("✅ All data has been cleared");
+    for (const table of tables) {
+      try {
+        await prisma.$executeRawUnsafe(`DELETE FROM \"${table}\";`);
+        console.log(`✅ Cleared ${table}`);
+      } catch (error) {
+        if (error.code === 'P2021') {
+          console.log(`⚠️ Table ${table} does not exist (this is normal for new tables)`);
+        } else {
+          console.log(`⚠️ Failed to clear ${table}: ${error.message}`);
+        }
+      }
+    }
+    
+    console.log('✅ Database cleared successfully');
   } catch (error) {
-    console.error("❌ Error clearing data:", error);
-    process.exit(1);
+    console.error('❌ Error clearing database:', error);
+    throw error;
   } finally {
     await prisma.$disconnect();
   }
 }
 
-clearAllData();
+if (require.main === module) {
+  clearAll().catch(console.error);
+}
+
+module.exports = { clearAll };

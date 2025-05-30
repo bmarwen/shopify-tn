@@ -11,11 +11,14 @@ export interface Category {
 export interface ProductVariant {
   id?: string;
   name: string;
-  price: number;
-  inventory: number;
-  sku?: string;
-  barcode?: string;
-  options: Record<string, any>;
+  price: number;    // Required - each variant must have a price
+  cost?: number;    // Optional cost for this variant
+  tva: number;      // TVA for this variant, default 19%
+  inventory: number; // Stock for this specific variant
+  sku?: string;     // Optional SKU for this variant
+  barcode?: string; // Optional barcode for this variant
+  images?: string[]; // Variant-specific images
+  options: Record<string, any>; // Required variant options {color: "Red", size: "XL", etc}
 }
 
 export interface CustomField {
@@ -44,19 +47,14 @@ export interface Product {
   name: string;
   slug?: string;
   description?: string;
-  price: number;
-  cost?: number | null;
-  tva?: number;
-  sku?: string;
-  barcode?: string;
-  inventory: number;
-  lowStockAlert?: boolean;
+  sku?: string;            // Optional base SKU
+  barcode?: string;        // Optional base barcode
   weight?: number | null;
   dimensions?: Record<string, any> | null;
-  images: string[];
+  images: string[];        // Common product images
   expiryDate?: string | Date | null;
   categories: Category[];
-  variants: ProductVariant[];
+  variants: ProductVariant[]; // All pricing/inventory is in variants
   customFields: CustomField[];
   _count: {
     variants: number;
@@ -89,14 +87,13 @@ export interface ProductResponse {
 export interface ProductFormValues {
   name: string;
   description?: string;
-  price: number;
-  cost?: number | null;
+  sku?: string;
   barcode?: string;
-  inventory: number;
-  tva?: number;
+  weight?: number | null;
+  dimensions?: Record<string, any>;
   categoryIds: string[];
   images: string[];
-  variants: ProductVariant[];
+  variants: ProductVariant[]; // Required - at least one variant
   expiryDate?: string | null;
   customFieldValues: CustomField[];
 }

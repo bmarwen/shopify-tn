@@ -45,11 +45,15 @@ export const productsService = {
     }
 
     if (filters.inStock) {
-      where.inventory = { gt: 0 };
+      where.variants = {
+        some: { inventory: { gt: 0 } },
+      };
     }
 
     if (filters.lowStock) {
-      where.inventory = { lte: filters.lowStockThreshold || 5 };
+      where.variants = {
+        some: { inventory: { lte: filters.lowStockThreshold || 5 } },
+      };
     }
 
     if (filters.expiringSoon) {
@@ -122,10 +126,13 @@ export const productsService = {
             slug: true,
           },
         },
-        variants: true,
-        customFields: {
+        variants: {
           include: {
-            customField: true,
+            customFields: {
+              include: {
+                customField: true,
+              },
+            },
           },
         },
         _count: {
@@ -209,13 +216,15 @@ export const productsService = {
   },
 
   /**
-   * Get product statistics
+   * Get product statistics based on variants
    */
   async getProductStats(shopId: string, lowStockThreshold: number) {
     try {
-      // Use a safer approach that doesn't return BigInt directly
-      const products = await db.product.findMany({
-        where: { shopId },
+      // Get all variants for products in this shop
+      const variants = await db.productVariant.findMany({
+        where: {
+          product: { shopId },
+        },
         select: { inventory: true },
       });
 
@@ -224,10 +233,10 @@ export const productsService = {
       let lowStockCount = 0;
       let outOfStockCount = 0;
 
-      products.forEach((product) => {
-        totalInventory += product.inventory;
-        if (product.inventory <= lowStockThreshold) lowStockCount++;
-        if (product.inventory === 0) outOfStockCount++;
+      variants.forEach((variant) => {
+        totalInventory += variant.inventory;
+        if (variant.inventory <= lowStockThreshold) lowStockCount++;
+        if (variant.inventory === 0) outOfStockCount++;
       });
 
       return {
@@ -257,10 +266,13 @@ export const productsService = {
       },
       include: {
         categories: true,
-        variants: true,
-        customFields: {
+        variants: {
           include: {
-            customField: true,
+            customFields: {
+              include: {
+                customField: true,
+              },
+            },
           },
         },
       },

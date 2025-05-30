@@ -1,3 +1,4 @@
+// src/components/providers/shop-provider.tsx
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -23,6 +24,7 @@ type ShopContextType = {
   settings: ShopSettingsType;
   planType: string;
   isLoading: boolean;
+  error: string | null;
   refetch: () => Promise<void>;
 };
 
@@ -46,6 +48,7 @@ const defaultState: ShopContextType = {
   settings: defaultSettings,
   planType: "STANDARD",
   isLoading: true,
+  error: null,
   refetch: async () => {},
 };
 
@@ -57,32 +60,38 @@ export const useShop = () => useContext(ShopContext);
 
 // Shop provider component
 export const ShopProvider = ({ children }: { children: React.ReactNode }) => {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [shopState, setShopState] = useState<ShopContextType>(defaultState);
 
   // Function to fetch shop information
   const fetchShopInfo = async () => {
     try {
-      setShopState((prev) => ({ ...prev, isLoading: true }));
+      setShopState((prev) => ({ ...prev, isLoading: true, error: null }));
 
-      const res = await fetch("/api/shop");
+      const res = await fetch("/api/shop", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!res.ok) {
-        throw new Error("Failed to fetch shop data");
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `HTTP ${res.status}: ${res.statusText}`);
       }
 
       const data = await res.json();
 
       // If there's a redirect property, the shop doesn't exist
       if (data.redirect) {
-        throw new Error("Shop not found");
+        throw new Error("Shop not found or inactive");
       }
 
       setShopState({
-        shopId: session?.user?.shopId || null,
-        shopName: data.name,
-        shopLogo: data.logo,
-        shopSubdomain: data.subdomain,
+        shopId: session?.user?.shopId || data.id || null,
+        shopName: data.name || "",
+        shopLogo: data.logo || null,
+        shopSubdomain: data.subdomain || null,
         settings: {
           currency: data.settings?.currency || "USD",
           language: data.settings?.language || "en",
@@ -92,15 +101,19 @@ export const ShopProvider = ({ children }: { children: React.ReactNode }) => {
           address: data.settings?.address || null,
           lowStockThreshold: data.settings?.lowStockThreshold || 5,
         },
-        planType: session?.user?.planType || "STANDARD",
+        planType: session?.user?.planType || data.planType || "STANDARD",
         isLoading: false,
+        error: null,
         refetch: fetchShopInfo,
       });
     } catch (error) {
       console.error("Failed to load shop information:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to load shop information";
+      
       setShopState({
         ...defaultState,
         isLoading: false,
+        error: errorMessage,
         refetch: fetchShopInfo,
       });
     }
@@ -108,10 +121,24 @@ export const ShopProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Effect to load shop data when component mounts or session changes
   useEffect(() => {
-    if (session) {
-      fetchShopInfo();
+    // Only fetch if session is loaded and we have a user
+    if (sessionStatus === "loading") {
+      return; // Wait for session to load
     }
-  }, [session]);
+
+    if (sessionStatus === "authenticated" && session?.user) {
+      fetchShopInfo().catch((error) => {
+        console.error("Unhandled error in fetchShopInfo:", error);
+      });
+    } else if (sessionStatus === "unauthenticated") {
+      // User is not authenticated, set default state
+      setShopState({
+        ...defaultState,
+        isLoading: false,
+        error: null,
+      });
+    }
+  }, [session, sessionStatus]);
 
   return (
     <ShopContext.Provider value={shopState}>{children}</ShopContext.Provider>

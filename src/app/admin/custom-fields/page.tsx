@@ -32,7 +32,7 @@ export default async function CustomFieldsPage() {
   // Count products using each custom field
   const fieldsWithUsage = await Promise.all(
     customFields.map(async (field) => {
-      const usageCount = await db.customFieldValue.count({
+      const usageCount = await db.variantCustomFieldValue.count({
         where: { customFieldId: field.id },
       });
 
@@ -54,7 +54,7 @@ export default async function CustomFieldsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2">
           <Card className="border-indigo-200 shadow-sm">
-            <CardHeader className="bg-indigo-50 border-b border-indigo-200">
+            <CardHeader className="bg-zinc-800 border-b border-indigo-200">
               <CardTitle className="text-indigo-800 font-semibold">
                 Custom Fields List
               </CardTitle>

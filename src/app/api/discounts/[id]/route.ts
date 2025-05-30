@@ -19,12 +19,121 @@ export async function GET(
     const shopId = session.user.shopId;
     const discountId = params.id;
 
-    // Get the discount with validation that it belongs to a product in this shop
+    // Get the discount with enhanced relations
     const discount = await db.discount.findFirst({
       where: {
         id: discountId,
+        isDeleted: false, // Don't show soft deleted discounts
+        OR: [
+          // Legacy single product/variant discounts
+          {
+            product: { shopId },
+          },
+          {
+            variant: {
+              product: { shopId }
+            }
+          },
+          // Multi-targeting discounts (products)
+          {
+            products: {
+              some: {
+                shopId: shopId
+              }
+            }
+          },
+          // Multi-targeting discounts (variants)
+          {
+            variants: {
+              some: {
+                product: {
+                  shopId: shopId
+                }
+              }
+            }
+          },
+          // Category targeting
+          {
+            category: {
+              shopId: shopId
+            }
+          },
+        ]
+      },
+      include: {
+        // Legacy relations
         product: {
-          shopId,
+          select: { 
+            id: true, 
+            name: true, 
+            sku: true,
+            barcode: true,
+            variants: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                sku: true,
+                barcode: true,
+                inventory: true,
+                options: true,
+              }
+            }
+          },
+        },
+        variant: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            sku: true,
+            barcode: true,
+            inventory: true,
+            options: true,
+            product: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        },
+        // Multi-targeting relations
+        products: {
+          select: { 
+            id: true, 
+            name: true, 
+            sku: true,
+            barcode: true,
+            variants: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                sku: true,
+                barcode: true,
+                inventory: true,
+                options: true,
+              }
+            }
+          },
+        },
+        variants: {
+          select: { 
+            id: true, 
+            name: true, 
+            price: true,
+            sku: true,
+            barcode: true,
+            inventory: true,
+            options: true,
+            product: {
+              select: { id: true, name: true }
+            }
+          },
+        },
+        category: {
+          select: { id: true, name: true },
         },
       },
     });
@@ -46,7 +155,7 @@ export async function GET(
   }
 }
 
-// UPDATE a discount
+// UPDATE a discount (targeting cannot be changed)
 export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -65,15 +174,58 @@ export async function PUT(
     const shopId = session.user.shopId;
     const discountId = params.id;
     const body = await req.json();
-    const { percentage, enabled, startDate, endDate, productId } = body;
+    const { 
+      title, 
+      description, 
+      image, 
+      percentage, 
+      enabled, 
+      startDate, 
+      endDate,
+      availableOnline,
+      availableInStore 
+    } = body;
 
-    // Verify the discount exists and belongs to a product in this shop
+    // Verify the discount exists and belongs to this shop
     const existingDiscount = await db.discount.findFirst({
       where: {
         id: discountId,
-        product: {
-          shopId,
-        },
+        isDeleted: false, // Don't allow updating soft deleted discounts
+        OR: [
+          // Legacy single product/variant discounts
+          {
+            product: { shopId },
+          },
+          {
+            variant: {
+              product: { shopId }
+            }
+          },
+          // Multi-targeting discounts (products)
+          {
+            products: {
+              some: {
+                shopId: shopId
+              }
+            }
+          },
+          // Multi-targeting discounts (variants)
+          {
+            variants: {
+              some: {
+                product: {
+                  shopId: shopId
+                }
+              }
+            }
+          },
+          // Category targeting
+          {
+            category: {
+              shopId: shopId
+            }
+          },
+        ]
       },
     });
 
@@ -84,37 +236,82 @@ export async function PUT(
       );
     }
 
-    // Verify the product belongs to this shop if it's being changed
-    if (productId && productId !== existingDiscount.productId) {
-      const product = await db.product.findUnique({
-        where: {
-          id: productId,
-          shopId,
-        },
-      });
-
-      if (!product) {
-        return NextResponse.json(
-          { error: "Product not found" },
-          { status: 404 }
-        );
-      }
+    // Validate at least one availability option is selected if both are provided
+    if (availableOnline !== undefined && availableInStore !== undefined && !availableOnline && !availableInStore) {
+      return NextResponse.json(
+        { error: "At least one availability option (Online or In-Store) must be selected" },
+        { status: 400 }
+      );
     }
 
-    // Update the discount
+    // Update the discount (excluding targeting fields)
     const updatedDiscount = await db.discount.update({
       where: { id: discountId },
       data: {
-        percentage:
-          percentage !== undefined ? parseFloat(percentage) : undefined,
+        title: title !== undefined ? title : undefined,
+        description: description !== undefined ? description : undefined,
+        image: image !== undefined ? image : undefined,
+        percentage: percentage !== undefined ? parseFloat(percentage) : undefined,
         enabled: enabled !== undefined ? enabled === true : undefined,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
-        productId: productId || undefined,
+        availableOnline: availableOnline !== undefined ? availableOnline : undefined,
+        availableInStore: availableInStore !== undefined ? availableInStore : undefined,
+      },
+      include: {
+        // Legacy relations
+        product: {
+          select: { 
+            id: true, 
+            name: true, 
+            variants: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+              },
+              take: 3
+            }
+          },
+        },
+        variant: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            product: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        },
+        // Multi-targeting relations
+        products: {
+          select: { id: true, name: true },
+        },
+        variants: {
+          select: { 
+            id: true, 
+            name: true, 
+            price: true,
+            product: {
+              select: { id: true, name: true }
+            }
+          },
+        },
+        category: {
+          select: { id: true, name: true },
+        },
       },
     });
 
-    return NextResponse.json(updatedDiscount);
+    return NextResponse.json({
+      success: true,
+      discount: updatedDiscount,
+      message: "Discount updated successfully"
+    });
   } catch (error) {
     console.error("Error updating discount:", error);
     return NextResponse.json(
@@ -124,7 +321,7 @@ export async function PUT(
   }
 }
 
-// DELETE a discount
+// DELETE a discount (soft delete only)
 export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -143,13 +340,46 @@ export async function DELETE(
     const shopId = session.user.shopId;
     const discountId = params.id;
 
-    // Verify the discount exists and belongs to a product in this shop
+    // Verify the discount exists and belongs to this shop
     const discount = await db.discount.findFirst({
       where: {
         id: discountId,
-        product: {
-          shopId,
-        },
+        isDeleted: false, // Don't allow deleting already deleted discounts
+        OR: [
+          // Legacy single product/variant discounts
+          {
+            product: { shopId },
+          },
+          {
+            variant: {
+              product: { shopId }
+            }
+          },
+          // Multi-targeting discounts (products)
+          {
+            products: {
+              some: {
+                shopId: shopId
+              }
+            }
+          },
+          // Multi-targeting discounts (variants)
+          {
+            variants: {
+              some: {
+                product: {
+                  shopId: shopId
+                }
+              }
+            }
+          },
+          // Category targeting
+          {
+            category: {
+              shopId: shopId
+            }
+          },
+        ]
       },
     });
 
@@ -160,12 +390,19 @@ export async function DELETE(
       );
     }
 
-    // Delete the discount
-    await db.discount.delete({
+    // Always soft delete - mark as deleted and deactivate
+    await db.discount.update({
       where: { id: discountId },
+      data: {
+        isDeleted: true,
+        enabled: false, // Deactivate to prevent further use
+      },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true, 
+      message: "Discount deleted successfully. Order history has been preserved for analytics." 
+    });
   } catch (error) {
     console.error("Error deleting discount:", error);
     return NextResponse.json(

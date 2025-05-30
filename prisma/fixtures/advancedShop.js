@@ -47,8 +47,8 @@ async function run(prisma) {
         active: true,
         settings: {
           create: {
-            currency: "USD",
-            language: "en",
+            currency: "DT",
+            language: "fr",
             timezone: "UTC",
             lowStockThreshold: 5,
             contactEmail: "advanced@example.com",
@@ -107,36 +107,78 @@ async function run(prisma) {
       },
     });
 
-    // Add some products
+    // Add some products with variants
     const product1 = await prisma.product.create({
       data: {
         name: "Premium Smartwatch",
         slug: "premium-smartwatch",
         description: "High-end smartwatch with advanced features",
-        price: 299.99,
-        inventory: 25,
         images: ["/assets/images/products/smartwatch.jpg"],
         shopId: advancedShop.id,
         categories: {
           connect: [{ id: subcategory.id }],
         },
+        variants: {
+          create: [
+            {
+              name: "Black / 42mm",
+              price: 299.99,
+              cost: 200.00,
+              tva: 19,
+              inventory: 15,
+              sku: "WATCH-BLK-42",
+              options: { color: "Black", size: "42mm" },
+            },
+            {
+              name: "Silver / 42mm",
+              price: 299.99,
+              cost: 200.00,
+              tva: 19,
+              inventory: 10,
+              sku: "WATCH-SIL-42",
+              options: { color: "Silver", size: "42mm" },
+            },
+          ],
+        },
       },
     });
+    console.log(`Created product: ${product1.name} with variants`);
 
     const product2 = await prisma.product.create({
       data: {
         name: "Designer Jacket",
         slug: "designer-jacket",
         description: "Premium designer jacket",
-        price: 199.99,
-        inventory: 15,
         images: ["/assets/images/products/jacket.jpg"],
         shopId: advancedShop.id,
         categories: {
           connect: [{ id: category2.id }],
         },
+        variants: {
+          create: [
+            {
+              name: "Black / M",
+              price: 199.99,
+              cost: 120.00,
+              tva: 19,
+              inventory: 8,
+              sku: "JACKET-BLK-M",
+              options: { color: "Black", size: "M" },
+            },
+            {
+              name: "Black / L",
+              price: 199.99,
+              cost: 120.00,
+              tva: 19,
+              inventory: 7,
+              sku: "JACKET-BLK-L",
+              options: { color: "Black", size: "L" },
+            },
+          ],
+        },
       },
     });
+    console.log(`Created product: ${product2.name} with variants`);
 
     // Check for existing subscription before creating a new one
     const existingSubscription = await prisma.subscription.findFirst({
@@ -180,7 +222,7 @@ async function run(prisma) {
             subscriptionId: advancedSubscription.id,
             amount: totalAmount,
             paymentDate: now,
-            paymentMethod: "CREDIT_CARD",
+            paymentMethod: "BANK_TRANSFER",
             status: "COMPLETED",
             transactionId: "TRX-ADV-123456",
             notes: "Full payment for 1 year",

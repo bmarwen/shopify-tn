@@ -22,8 +22,8 @@ async function run(prisma) {
       active: true,
       settings: {
         create: {
-          currency: "USD",
-          language: "en",
+          currency: "DT",
+          language: "fr",
           timezone: "UTC",
           lowStockThreshold: 5,
           contactEmail: "contact@parashop.example",

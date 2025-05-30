@@ -22,10 +22,8 @@ import {
 // Import tab components
 import BasicInfoTab from "./product-tabs/basic-info-tab";
 import ImagesTab from "./product-tabs/images-tab";
-import PricingTab from "./product-tabs/pricing-tab";
 import CategoriesTab from "./product-tabs/categories-tab";
 import VariantsTab from "./product-tabs/variants-tab";
-import CustomFieldsTab from "./product-tabs/custom-fields-tab";
 
 export default function ProductForm({
   product,
@@ -39,16 +37,22 @@ export default function ProductForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("basic");
   const [formState, setFormState] = useState<ProductFormValues | null>(null);
+  const [localCustomFields, setLocalCustomFields] = useState(customFields);
 
-  // Transform custom field values from the product data format to form format
-  const transformCustomFieldsForForm = () => {
-    if (!product || !product.customFields) return [];
-
-    return product.customFields.map((cf: any) => ({
-      id: cf.id,
-      customFieldId: cf.customFieldId,
-      value: cf.value,
-    }));
+  // Transform custom field values from variants for API
+  const transformCustomFieldsFromVariants = (variants: any[]) => {
+    const allCustomFieldValues: any[] = [];
+    variants.forEach((variant, variantIndex) => {
+      if (variant.customFieldValues) {
+        variant.customFieldValues.forEach((cfv: any) => {
+          allCustomFieldValues.push({
+            ...cfv,
+            variantId: variant.id || `temp-${variantIndex}`, // Use temp ID for new variants
+          });
+        });
+      }
+    });
+    return allCustomFieldValues;
   };
 
   // Default values
@@ -56,12 +60,10 @@ export default function ProductForm({
     ? {
         name: product.name,
         description: product.description || "",
-        price: product.price,
-        // No compareAtPrice anymore
-        cost: product.cost || null,
+        sku: product.sku || "",
         barcode: product.barcode || "",
-        inventory: product.inventory,
-        tva: product.tva || 19,
+        weight: product.weight || null,
+        dimensions: product.dimensions || undefined,
         categoryIds: product.categories?.map((c: any) => c.id) || [],
         images: product.images || [],
         variants:
@@ -69,48 +71,84 @@ export default function ProductForm({
             id: v.id,
             name: v.name,
             price: v.price,
+            cost: v.cost,
+            tva: v.tva || 19,
             inventory: v.inventory,
+            sku: v.sku || "",
             barcode: v.barcode || "",
             options: v.options,
-          })) || [],
+            customFieldValues: v.customFields?.map((cf: any) => ({
+              id: cf.id,
+              customFieldId: cf.customFieldId,
+              value: cf.value,
+            })) || [],
+          })) || [
+            {
+              name: "Default",
+              price: 0,
+              cost: null,
+              tva: 19,
+              inventory: 0,
+              sku: "",
+              barcode: "",
+              options: {},
+              customFieldValues: [],
+            },
+          ],
         expiryDate: product.expiryDate
           ? new Date(product.expiryDate).toISOString().split("T")[0]
           : null,
-        customFieldValues: transformCustomFieldsForForm(),
       }
     : {
         name: "",
         description: "",
-        price: 0,
-        cost: null,
-        inventory: 0,
-        tva: 19,
+        sku: "",
+        barcode: "",
+        weight: null,
+        dimensions: undefined,
         categoryIds: [],
         images: [],
-        variants: [],
+        variants: [
+          {
+            name: "Default",
+            price: 0,
+            cost: null,
+            tva: 19,
+            inventory: 0,
+            sku: "",
+            barcode: "",
+            options: {},
+            customFieldValues: [],
+          },
+        ],
         expiryDate: null,
-        customFieldValues: [],
       };
 
   // Create form with schema validation and default values
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues,
+    mode: "onChange", // Enable real-time validation
   });
 
   // Initialize and store the form state with defaults
   useEffect(() => {
     setFormState(defaultValues);
-  }, []);
+  }, [product]);
 
   // Sync form state when switching tabs
   useEffect(() => {
     if (formState) {
       Object.keys(formState).forEach((key) => {
-        form.setValue(key as any, formState[key as keyof ProductFormValues]);
+        const value = formState[key as keyof ProductFormValues];
+        // Only set the value if it's different from current form value
+        const currentValue = form.getValues(key as any);
+        if (JSON.stringify(currentValue) !== JSON.stringify(value)) {
+          form.setValue(key as any, value);
+        }
       });
     }
-  }, [formState]);
+  }, [formState, form]);
 
   // Handle tab change - preserve form state between tabs
   const handleTabChange = (value: string) => {
@@ -175,6 +213,53 @@ export default function ProductForm({
     }
   };
 
+  // Function to get all form errors for summary
+  const getFormErrors = () => {
+    const errors = form.formState.errors;
+    const errorMessages: string[] = [];
+    
+    if (errors.name) {
+      errorMessages.push(`Name: ${errors.name.message}`);
+    }
+    if (errors.variants) {
+      if (typeof errors.variants.message === 'string') {
+        errorMessages.push(`Variants: ${errors.variants.message}`);
+      } else if (Array.isArray(errors.variants)) {
+        errors.variants.forEach((variantError, index) => {
+          if (variantError?.name) {
+            errorMessages.push(`Variant ${index + 1} Name: ${variantError.name.message}`);
+          }
+          if (variantError?.price) {
+            errorMessages.push(`Variant ${index + 1} Price: ${variantError.price.message}`);
+          }
+        });
+      }
+    }
+    
+    return errorMessages;
+  };
+
+  const formErrors = getFormErrors();
+
+  // Refresh custom fields function
+  const refreshCustomFields = async () => {
+    try {
+      const response = await fetch('/api/custom-fields');
+      if (response.ok) {
+        const data = await response.json();
+        console.log("ProductForm - refreshed customFields:", data);
+        setLocalCustomFields(data);
+      } else {
+        throw new Error('Failed to fetch custom fields');
+      }
+    } catch (error) {
+      console.error('Error refreshing custom fields:', error);
+      throw error;
+    }
+  };
+
+  console.log("ProductForm - localCustomFields:", localCustomFields);
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -231,17 +316,6 @@ export default function ProductForm({
               className="rounded-md"
               style={{
                 backgroundColor:
-                  activeTab === "pricing" ? "#2c3e50" : "transparent",
-                color: activeTab === "pricing" ? "white" : "#bdc3c7",
-              }}
-              value="pricing"
-            >
-              Pricing & Inventory
-            </TabsTrigger>
-            <TabsTrigger
-              className="rounded-md"
-              style={{
-                backgroundColor:
                   activeTab === "categories" ? "#2c3e50" : "transparent",
                 color: activeTab === "categories" ? "white" : "#bdc3c7",
               }}
@@ -258,18 +332,7 @@ export default function ProductForm({
               }}
               value="variants"
             >
-              Variants
-            </TabsTrigger>
-            <TabsTrigger
-              className="rounded-md"
-              style={{
-                backgroundColor:
-                  activeTab === "custom-fields" ? "#2c3e50" : "transparent",
-                color: activeTab === "custom-fields" ? "white" : "#bdc3c7",
-              }}
-              value="custom-fields"
-            >
-              Custom Fields
+              Variants & Custom Fields
             </TabsTrigger>
           </TabsList>
 
@@ -285,10 +348,6 @@ export default function ProductForm({
             />
           </TabsContent>
 
-          <TabsContent value="pricing" className="space-y-4">
-            <PricingTab control={form.control} />
-          </TabsContent>
-
           <TabsContent value="categories">
             <CategoriesTab
               control={form.control}
@@ -301,17 +360,27 @@ export default function ProductForm({
             <VariantsTab
               control={form.control}
               onFormStateChange={updateFormState}
-            />
-          </TabsContent>
-
-          <TabsContent value="custom-fields">
-            <CustomFieldsTab
-              control={form.control}
-              customFields={customFields}
-              onFormStateChange={updateFormState}
+              customFields={localCustomFields}
+              onRefreshCustomFields={refreshCustomFields}
             />
           </TabsContent>
         </Tabs>
+        
+        {/* Form Error Summary */}
+        {formErrors.length > 0 && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="font-medium mb-2">Please fix the following errors:</div>
+              <ul className="list-disc list-inside space-y-1">
+                {formErrors.map((error, index) => (
+                  <li key={index} className="text-sm">{error}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="flex justify-end gap-4">
           <Button
             type="button"

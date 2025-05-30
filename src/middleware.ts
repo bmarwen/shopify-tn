@@ -2,74 +2,93 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const hostname = request.headers.get("host") || "";
+  try {
+    const { pathname } = request.nextUrl;
+    const hostname = request.headers.get("host") || "";
 
-  // For development environment, use the environment variable
-  const subdomain =
-    process.env.NODE_ENV === "development"
-      ? process.env.SHOP_SUBDOMAIN || "para"
-      : getSubdomainFromHostname(hostname);
+    // For development environment, use the environment variable
+    const subdomain =
+      process.env.NODE_ENV === "development"
+        ? process.env.SHOP_SUBDOMAIN || "para"
+        : getSubdomainFromHostname(hostname);
 
-  // Add the current subdomain to headers for backend use
-  const requestHeaders = new Headers(request.headers);
-  if (subdomain) {
-    requestHeaders.set("x-shop-subdomain", subdomain);
-  }
-
-  // Main store.tn domain handling
-  if (!subdomain || subdomain === "www") {
-    // This is for the main store.tn site
-    if (pathname.startsWith("/admin") && !(await isAuthenticated(request))) {
-      return redirectToLogin(request);
+    // Add the current subdomain to headers for backend use
+    const requestHeaders = new Headers(request.headers);
+    if (subdomain) {
+      requestHeaders.set("x-shop-subdomain", subdomain);
     }
-    // Continue to the main store application
+
+    // Main store.tn domain handling
+    if (!subdomain || subdomain === "www") {
+      // This is for the main store.tn site
+      if (pathname.startsWith("/admin")) {
+        try {
+          const isAuth = await isAuthenticated(request);
+          if (!isAuth) {
+            return redirectToLogin(request);
+          }
+        } catch (error) {
+          console.error("Auth check failed:", error);
+          return redirectToLogin(request);
+        }
+      }
+      // Continue to the main store application
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    }
+
+    // Subdomain handling (e.g., para.store.tn)
+    // Admin routes for shop owners
+    if (pathname.startsWith("/admin")) {
+      try {
+        const token = await getToken({ req: request });
+
+        // If not authenticated, redirect to login
+        if (!token) {
+          return redirectToLogin(request, subdomain);
+        }
+
+        // Check if user belongs to this shop
+        if (token.shopSubdomain !== subdomain) {
+          // User is authenticated but trying to access another shop's admin
+          return NextResponse.redirect(new URL("/unauthorized", request.url));
+        }
+
+        // User is authenticated and authorized for this shop's admin
+        return NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        });
+      } catch (error) {
+        console.error("Token validation failed:", error);
+        return redirectToLogin(request, subdomain);
+      }
+    }
+
+    // API routes
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    }
+
+    // All other routes are for the storefront
     return NextResponse.next({
       request: {
         headers: requestHeaders,
       },
     });
+  } catch (error) {
+    console.error("Middleware error:", error);
+    // Fallback to allowing the request to continue
+    return NextResponse.next();
   }
-
-  // Subdomain handling (e.g., para.store.tn)
-  // Admin routes for shop owners
-  if (pathname.startsWith("/admin")) {
-    const token = await getToken({ req: request });
-
-    // If not authenticated, redirect to login
-    if (!token) {
-      return redirectToLogin(request, subdomain);
-    }
-
-    // Check if user belongs to this shop
-    if (token.shopSubdomain !== subdomain) {
-      // User is authenticated but trying to access another shop's admin
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
-    }
-
-    // User is authenticated and authorized for this shop's admin
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
-  }
-
-  // API routes
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
-  }
-
-  // All other routes are for the storefront
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
 }
 
 // Helper function to extract subdomain from hostname
@@ -107,8 +126,13 @@ function redirectToLogin(
 
 // Check if the request is authenticated (simplified, actual implementation would use getToken)
 async function isAuthenticated(request: NextRequest): Promise<boolean> {
-  const token = await getToken({ req: request });
-  return !!token;
+  try {
+    const token = await getToken({ req: request });
+    return !!token;
+  } catch (error) {
+    console.error("Authentication check failed:", error);
+    return false;
+  }
 }
 
 // Match all pathnames except for assets, public routes, etc.

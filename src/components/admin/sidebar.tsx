@@ -15,6 +15,7 @@ import {
   Bell,
   Tag,
   Ticket,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ export default function AdminSidebar() {
     { name: "Dashboard", href: "/admin", icon: Home },
     { name: "Products", href: "/admin/products", icon: Package },
     { name: "Categories", href: "/admin/categories", icon: List },
+    { name: "Point of Sale", href: "/admin/pos", icon: CreditCard },
     { name: "Discounts", href: "/admin/discounts", icon: Tag },
     { name: "Discount Codes", href: "/admin/discount-codes", icon: Ticket },
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },

@@ -39,11 +39,27 @@ const paymentStatuses = [
   { value: "PARTIALLY_REFUNDED", label: "Partially Refunded" },
 ];
 
+const orderSources = [
+  { value: "all", label: "All Sources" },
+  { value: "ONLINE", label: "Online" },
+  { value: "IN_STORE", label: "In Store" },
+  { value: "PHONE", label: "Phone" },
+];
+
+const dateFilters = [
+  { value: "today", label: "Today" },
+  { value: "thisWeek", label: "This Week" },
+  { value: "thisMonth", label: "This Month" },
+  { value: "custom", label: "Custom Range" },
+];
+
 interface OrderFiltersProps {
   currentFilters: {
     search?: string;
     status?: string;
     paymentStatus?: string;
+    orderSource?: string;
+    dateFilter?: string;
     dateFrom?: string;
     dateTo?: string;
     page?: string;
@@ -65,6 +81,12 @@ export default function OrderFilters({ currentFilters }: OrderFiltersProps) {
   );
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState(
     currentFilters.paymentStatus || "all"
+  );
+  const [selectedOrderSource, setSelectedOrderSource] = useState(
+    currentFilters.orderSource || "all"
+  );
+  const [selectedDateFilter, setSelectedDateFilter] = useState(
+    currentFilters.dateFilter || "today"
   );
   const [dateFrom, setDateFrom] = useState<Date | undefined>(
     currentFilters.dateFrom ? new Date(currentFilters.dateFrom) : undefined
@@ -101,16 +123,36 @@ export default function OrderFilters({ currentFilters }: OrderFiltersProps) {
       params.delete("paymentStatus");
     }
 
-    // Update date filters
-    if (dateFrom) {
-      params.set("dateFrom", format(dateFrom, "yyyy-MM-dd"));
+    // Update order source parameter
+    if (selectedOrderSource && selectedOrderSource !== "all") {
+      params.set("orderSource", selectedOrderSource);
     } else {
-      params.delete("dateFrom");
+      params.delete("orderSource");
     }
 
-    if (dateTo) {
-      params.set("dateTo", format(dateTo, "yyyy-MM-dd"));
+    // Update date filter parameter
+    if (selectedDateFilter) {
+      params.set("dateFilter", selectedDateFilter);
     } else {
+      params.delete("dateFilter");
+    }
+
+    // Update date filters (only for custom range)
+    if (selectedDateFilter === "custom") {
+      if (dateFrom) {
+        params.set("dateFrom", format(dateFrom, "yyyy-MM-dd"));
+      } else {
+        params.delete("dateFrom");
+      }
+
+      if (dateTo) {
+        params.set("dateTo", format(dateTo, "yyyy-MM-dd"));
+      } else {
+        params.delete("dateTo");
+      }
+    } else {
+      // Clear custom date fields when using preset date filters
+      params.delete("dateFrom");
       params.delete("dateTo");
     }
 
@@ -125,13 +167,15 @@ export default function OrderFilters({ currentFilters }: OrderFiltersProps) {
 
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, selectedStatus, selectedPaymentStatus, dateFrom, dateTo]);
+  }, [searchTerm, selectedStatus, selectedPaymentStatus, selectedOrderSource, selectedDateFilter, dateFrom, dateTo]);
 
   // Clear all filters
   const clearFilters = () => {
     setSearchTerm("");
     setSelectedStatus("all");
     setSelectedPaymentStatus("all");
+    setSelectedOrderSource("all");
+    setSelectedDateFilter("today");
     setDateFrom(undefined);
     setDateTo(undefined);
 
@@ -142,6 +186,8 @@ export default function OrderFilters({ currentFilters }: OrderFiltersProps) {
     searchTerm ||
     selectedStatus !== "all" ||
     selectedPaymentStatus !== "all" ||
+    selectedOrderSource !== "all" ||
+    selectedDateFilter !== "today" ||
     dateFrom ||
     dateTo;
 
@@ -200,39 +246,74 @@ export default function OrderFilters({ currentFilters }: OrderFiltersProps) {
             </SelectContent>
           </Select>
 
+          <Select
+            value={selectedOrderSource}
+            onValueChange={setSelectedOrderSource}
+          >
+            <SelectTrigger className="w-44 text-gray-100">
+              <SelectValue placeholder="Order Source" />
+            </SelectTrigger>
+            <SelectContent>
+              {orderSources.map((source) => (
+                <SelectItem key={source.value} value={source.value}>
+                  {source.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           {/* Date filter */}
           <div className="flex gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="flex gap-2 text-gray-700">
-                  <CalendarIcon className="h-4 w-4 text-gray-500" />
-                  {dateFrom ? format(dateFrom, "PP") : "From Date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dateFrom}
-                  onSelect={setDateFrom}
-                />
-              </PopoverContent>
-            </Popover>
+            <Select
+              value={selectedDateFilter}
+              onValueChange={setSelectedDateFilter}
+            >
+              <SelectTrigger className="w-36 text-gray-100">
+                <SelectValue placeholder="Date Filter" />
+              </SelectTrigger>
+              <SelectContent>
+                {dateFilters.map((filter) => (
+                  <SelectItem key={filter.value} value={filter.value}>
+                    {filter.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedDateFilter === "custom" && (
+              <>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="flex gap-2 text-gray-700">
+                      <CalendarIcon className="h-4 w-4 text-gray-500" />
+                      {dateFrom ? format(dateFrom, "PP") : "From Date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dateFrom}
+                      onSelect={setDateFrom}
+                    />
+                  </PopoverContent>
+                </Popover>
 
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="flex gap-2 text-gray-700">
-                  <CalendarIcon className="h-4 w-4 text-gray-500" />
-                  {dateTo ? format(dateTo, "PP") : "To Date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dateTo}
-                  onSelect={setDateTo}
-                />
-              </PopoverContent>
-            </Popover>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="flex gap-2 text-gray-700">
+                      <CalendarIcon className="h-4 w-4 text-gray-500" />
+                      {dateTo ? format(dateTo, "PP") : "To Date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dateTo}
+                      onSelect={setDateTo}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </>
+            )}
           </div>
 
           {/* Clear filters button */}

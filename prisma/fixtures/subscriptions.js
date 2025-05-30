@@ -134,7 +134,7 @@ async function run(prisma) {
             subscriptionId: expiredSubscription.id,
             amount: advancedPricing.monthlyPrice * 6,
             paymentDate: expiredDate,
-            paymentMethod: "CREDIT_CARD",
+            paymentMethod: "CASH",
             status: "COMPLETED",
             transactionId: "TRX-654321",
             notes: "Full payment for 6 months subscription",

@@ -6,7 +6,7 @@ import { shopService } from "@/lib/services/shop.service";
 import { slugify } from "@/lib/utils";
 import { db } from "@/lib/prisma";
 import { serializeBigInt } from "@/lib/serializer";
-import { s3ImageService } from "@/lib/services/s3-image.service";
+import s3EnhancedService from "@/lib/services/s3-enhanced.service";
 
 // GET products with filtering, sorting, and pagination
 export async function GET(req: NextRequest) {
@@ -81,9 +81,9 @@ export async function GET(req: NextRequest) {
         if (product.images && product.images.length > 0) {
           const processedImages = await Promise.all(
             product.images.map(async (image) => {
-              if (s3ImageService.isS3Key(image)) {
+              if (s3EnhancedService.isS3Key(image)) {
                 try {
-                  return await s3ImageService.getImageUrl(image);
+                  return s3EnhancedService.getPublicUrl(image);
                 } catch (error) {
                   console.error(`Error getting image URL for ${image}:`, error);
                   return image; // Return original key if URL generation fails
@@ -150,26 +150,40 @@ export async function POST(req: NextRequest) {
       name,
       slug,
       description,
-      price,
-      cost,
       sku,
       barcode,
-      inventory,
-      tva,
       weight,
+      dimensions,
       categoryIds,
       images,
       variants,
       expiryDate,
-      customFields = [],
     } = body;
 
     // Validate required fields
-    if (!name || price === undefined) {
+    if (!name) {
       return NextResponse.json(
-        { error: "Name and price are required" },
+        { error: "Name is required" },
         { status: 400 }
       );
+    }
+
+    // Validate that we have at least one variant
+    if (!variants || variants.length === 0) {
+      return NextResponse.json(
+        { error: "At least one variant is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate that all variants have required fields
+    for (const variant of variants) {
+      if (!variant.name || variant.price === undefined) {
+        return NextResponse.json(
+          { error: "All variants must have a name and price" },
+          { status: 400 }
+        );
+      }
     }
 
     // Generate slug if not provided
@@ -191,41 +205,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get shop settings for low stock threshold
-    const shopSettings = await db.shopSettings.findUnique({
-      where: { shopId },
-    });
-    const lowStockThreshold = shopSettings?.lowStockThreshold || 5;
-    const lowStockAlert = inventory <= lowStockThreshold;
+    // No need to calculate lowStockAlert here since it's variant-based now
 
-    // Process custom fields - validate they exist for this shop
-    const customFieldsData = [];
-    if (customFields && customFields.length > 0) {
-      for (const cf of customFields) {
-        // Look up the custom field in the database to ensure it exists
-        let customField = await db.customField.findFirst({
-          where: {
-            shopId,
-            name: cf.key,
-          },
-        });
-        // If it doesn't exist, create it
-        if (!customField) {
-          customField = await db.customField.create({
-            data: {
-              name: cf.key,
-              type: "TEXT", // Default type
-              required: false,
-              shopId,
-            },
-          });
-        }
-        customFieldsData.push({
-          customFieldId: customField.id,
-          value: cf.value,
-        });
-      }
-    }
+    // No need to process legacy custom fields - they're now handled at variant level
+    // Custom fields are now attached to individual variants
 
     // Process images - upload base64 data URLs to S3
     const processedImages = [];
@@ -234,10 +217,9 @@ export async function POST(req: NextRequest) {
         if (image && image.startsWith("data:")) {
           try {
             // Upload image to S3
-            const fileNameBase = `${productSlug}-${Date.now()}`; // Add timestamp to avoid collisions
-            const uploadResult = await s3ImageService.uploadImage(
+            const uploadResult = await s3EnhancedService.uploadBase64Image(
               image,
-              `${fileNameBase}.jpg`,
+              `${productSlug}-${Date.now()}.jpg`,
               "products"
             );
             processedImages.push(uploadResult.key); // Store S3 key
@@ -260,14 +242,10 @@ export async function POST(req: NextRequest) {
           name,
           slug: productSlug,
           description,
-          price,
-          cost,
           sku,
           barcode,
-          inventory,
-          tva: tva || 19, // Default TVA to 19% if not provided
-          lowStockAlert,
           weight,
+          dimensions,
           images: processedImages, // Use processed image array
           expiryDate: expiryDate ? new Date(expiryDate) : null,
           shopId,
@@ -278,36 +256,44 @@ export async function POST(req: NextRequest) {
       });
 
       // Create custom field values
-      if (customFieldsData.length > 0) {
-        await Promise.all(
-          customFieldsData.map((cfData) =>
-            tx.customFieldValue.create({
-              data: {
-                ...cfData,
-                productId: newProduct.id,
-              },
-            })
-          )
-        );
-      }
+      // No longer needed - custom fields are now handled at variant level
 
-      // Create variants if provided
-      if (variants && variants.length > 0) {
-        await Promise.all(
-          variants.map((variant: any) =>
-            tx.productVariant.create({
-              data: {
-                name: variant.name,
-                price: variant.price,
-                inventory: variant.inventory,
-                sku: variant.sku,
-                options: variant.options,
-                productId: newProduct.id,
-              },
-            })
-          )
-        );
-      }
+      // Create variants - required
+      const createdVariants = await Promise.all(
+        variants.map(async (variant: any) => {
+          const newVariant = await tx.productVariant.create({
+            data: {
+              name: variant.name,
+              price: variant.price,
+              cost: variant.cost || null,
+              tva: variant.tva || 19,
+              inventory: variant.inventory || 0,
+              sku: variant.sku || null,
+              barcode: variant.barcode || null,
+              images: variant.images || [],
+              options: variant.options || {},
+              productId: newProduct.id,
+            },
+          });
+
+          // Create custom field values for this variant if any
+          if (variant.customFieldValues && variant.customFieldValues.length > 0) {
+            await Promise.all(
+              variant.customFieldValues.map((cfv: any) =>
+                tx.variantCustomFieldValue.create({
+                  data: {
+                    customFieldId: cfv.customFieldId,
+                    value: cfv.value,
+                    variantId: newVariant.id,
+                  },
+                })
+              )
+            );
+          }
+
+          return newVariant;
+        })
+      );
 
       return newProduct;
     });
@@ -317,10 +303,13 @@ export async function POST(req: NextRequest) {
       where: { id: product.id },
       include: {
         categories: true,
-        variants: true,
-        customFields: {
+        variants: {
           include: {
-            customField: true,
+            customFields: {
+              include: {
+                customField: true,
+              },
+            },
           },
         },
       },
@@ -334,17 +323,17 @@ export async function POST(req: NextRequest) {
       completeProduct.images.length > 0
     ) {
       const imageUrls = await Promise.all(
-        completeProduct.images.map(async (image) => {
-          if (s3ImageService.isS3Key(image)) {
-            try {
-              return await s3ImageService.getImageUrl(image);
-            } catch (error) {
-              console.error(`Error getting image URL for ${image}:`, error);
-              return image; // Return original key if URL generation fails
-            }
-          }
-          return image; // Return original URL if not an S3 key
-        })
+      completeProduct.images.map(async (image) => {
+      if (s3EnhancedService.isS3Key(image)) {
+      try {
+      return s3EnhancedService.getPublicUrl(image);
+      } catch (error) {
+      console.error(`Error getting image URL for ${image}:`, error);
+      return image; // Return original key if URL generation fails
+      }
+      }
+      return image; // Return original URL if not an S3 key
+      })
       );
 
       responseProduct = {

@@ -15,17 +15,10 @@ import {
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
 import DiscountListActions from "@/components/admin/discount-list-actions";
-import Pagination from "@/components/admin/pagination";
+import { formatDate } from "@/lib/utils/currency";
+import SimpleS3Image from "@/components/ui/image-upload/simple-s3-image";
 
-interface DiscountsPageProps {
-  searchParams: {
-    [key: string]: string | string[] | undefined;
-  };
-}
-
-export default async function DiscountsPage({
-  searchParams,
-}: DiscountsPageProps) {
+export default async function DiscountsPage() {
   // Check authentication
   const session = await getServerSession(authOptions);
   if (!session?.user?.shopId) {
@@ -33,76 +26,186 @@ export default async function DiscountsPage({
   }
   const shopId = session.user.shopId;
 
-  // Parse pagination params safely
-  const page = parseInt(String(searchParams.page) || "1");
-  const perPage = parseInt(String(searchParams.perPage) || "10");
-  const productId = searchParams.product
-    ? String(searchParams.product)
-    : undefined;
+  // Get shop settings for currency
+  const shopSettings = await db.shopSettings.findUnique({
+    where: { shopId },
+    select: { currency: true },
+  }) || { currency: 'DT' };
 
-  // Build where clause for filtering
-  const where: any = {
-    product: {
-      shopId,
-    },
-  };
-
-  // Filter by specific product if requested
-  if (productId) {
-    where.productId = productId;
-  }
-
-  // Count total discounts for pagination
-  const totalDiscounts = await db.discount.count({
-    where,
-  });
-
-  // Calculate total pages
-  const totalPages = Math.ceil(totalDiscounts / perPage);
-
-  // Get discounts with pagination
+  // Get discounts with enhanced relations (exclude soft deleted)
   const discounts = await db.discount.findMany({
-    where,
+    where: {
+      isDeleted: false, // Only show non-deleted discounts
+      OR: [
+        // Legacy single product/variant discounts
+        {
+          product: { shopId },
+        },
+        {
+          variant: {
+            product: { shopId }
+          }
+        },
+        // Multi-targeting discounts (products)
+        {
+          products: {
+            some: {
+              shopId: shopId
+            }
+          }
+        },
+        // Multi-targeting discounts (variants)
+        {
+          variants: {
+            some: {
+              product: {
+                shopId: shopId
+              }
+            }
+          }
+        },
+        // Category targeting
+        {
+          category: {
+            shopId: shopId
+          }
+        },
+        // Global discounts (targeting all products)
+        {
+          AND: [
+            { productId: null },
+            { variantId: null },
+            { categoryId: null },
+            { products: { none: {} } },
+            { variants: { none: {} } }
+          ]
+        }
+      ]
+    },
     include: {
+      // Legacy relations
       product: {
+        select: { 
+          id: true, 
+          name: true, 
+          images: true,
+        },
+      },
+      variant: {
         select: {
           id: true,
           name: true,
-          price: true,
+          product: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      },
+      // Multi-targeting relations
+      products: {
+        select: { id: true, name: true },
+        take: 3, // Limit for display
+      },
+      variants: {
+        select: { 
+          id: true, 
+          name: true, 
+          product: {
+            select: { id: true, name: true }
+          }
         },
+        take: 3, // Limit for display
+      },
+      category: {
+        select: { id: true, name: true },
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
-    skip: (page - 1) * perPage,
-    take: perPage,
+    orderBy: { createdAt: "desc" },
   });
 
-  // Get product info if filtering by product
-  let productInfo = null;
-  if (productId) {
-    productInfo = await db.product.findUnique({
-      where: {
-        id: productId,
-        shopId,
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    });
-  }
-
   // Format dates for display
-  const formatDate = (date: Date | string) => {
-    return new Date(date).toLocaleDateString();
+  const formatDateForDisplay = (date: Date | string) => {
+    return formatDate(date, 'fr-FR');
   };
 
-  // Calculate the price after discount
-  const getDiscountedPrice = (price: number, discountPercentage: number) => {
-    const discount = (price * discountPercentage) / 100;
-    return (price - discount).toFixed(2);
+  // Helper to get discount target description
+  const getTargetDescription = (discount: any) => {
+    if (discount.product) {
+      return `Single: ${discount.product.name}`;
+    }
+    if (discount.variant) {
+      return `Variant: ${discount.variant.product.name} - ${discount.variant.name}`;
+    }
+    if (discount.category) {
+      return `Category: ${discount.category.name}`;
+    }
+    if (discount.products && discount.products.length > 0) {
+      const moreCount = discount.products.length > 3 ? ` +${discount.products.length - 3} more` : '';
+      return `Products: ${discount.products.slice(0, 3).map((p: any) => p.name).join(', ')}${moreCount}`;
+    }
+    if (discount.variants && discount.variants.length > 0) {
+      const moreCount = discount.variants.length > 3 ? ` +${discount.variants.length - 3} more` : '';
+      return `Variants: ${discount.variants.slice(0, 3).map((v: any) => `${v.product.name} - ${v.name}`).join(', ')}${moreCount}`;
+    }
+    return "All Products";
+  };
+
+  // Helper to get target badges
+  const getTargetBadges = (discount: any) => {
+    const badges = [];
+    
+    if (discount.category) {
+      badges.push(
+        <span key="category" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          Category: {discount.category.name}
+        </span>
+      );
+    }
+    
+    if (discount.products && discount.products.length > 0) {
+      badges.push(
+        <span key="products" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          {discount.products.length} Product{discount.products.length > 1 ? 's' : ''}
+        </span>
+      );
+    }
+    
+    if (discount.variants && discount.variants.length > 0) {
+      badges.push(
+        <span key="variants" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+          {discount.variants.length} Variant{discount.variants.length > 1 ? 's' : ''}
+        </span>
+      );
+    }
+    
+    if (discount.product) {
+      badges.push(
+        <span key="single" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+          Single Product
+        </span>
+      );
+    }
+    
+    if (discount.variant) {
+      badges.push(
+        <span key="variant" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+          Single Variant
+        </span>
+      );
+    }
+    
+    if (!discount.category && (!discount.products || discount.products.length === 0) && 
+        (!discount.variants || discount.variants.length === 0) && !discount.product && !discount.variant) {
+      badges.push(
+        <span key="all" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+          All Products
+        </span>
+      );
+    }
+    
+    return badges;
   };
 
   return (
@@ -110,20 +213,11 @@ export default async function DiscountsPage({
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-800">
-            {productInfo
-              ? `Discounts for ${productInfo.name}`
-              : "All Discounts"}
+            Discounts
           </h1>
-          {productInfo && (
-            <p className="text-gray-500">
-              <Link
-                href="/admin/discounts"
-                className="text-indigo-600 hover:underline"
-              >
-                Back to all discounts
-              </Link>
-            </p>
-          )}
+          <p className="text-gray-500">
+            Manage product discounts and promotional offers
+          </p>
         </div>
         <Link href="/admin/discounts/new">
           <Button>
@@ -137,11 +231,12 @@ export default async function DiscountsPage({
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead className="text-gray-700">Product</TableHead>
+              <TableHead className="text-gray-700">Image</TableHead>
+              <TableHead className="text-gray-700">Title/Target</TableHead>
               <TableHead className="text-gray-700">Percentage</TableHead>
-              <TableHead className="text-gray-700">Original Price</TableHead>
-              <TableHead className="text-gray-700">Discounted Price</TableHead>
+              <TableHead className="text-gray-700">Targeting</TableHead>
               <TableHead className="text-gray-700">Valid Period</TableHead>
+              <TableHead className="text-gray-700">Availability</TableHead>
               <TableHead className="text-gray-700">Status</TableHead>
               <TableHead className="text-right text-gray-700">
                 Actions
@@ -152,7 +247,7 @@ export default async function DiscountsPage({
             {discounts.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="text-center py-8 text-gray-600"
                 >
                   No discounts found.{" "}
@@ -160,7 +255,7 @@ export default async function DiscountsPage({
                     href="/admin/discounts/new"
                     className="text-indigo-600 hover:underline"
                   >
-                    Add your first discount
+                    Create your first discount
                   </Link>
                   .
                 </TableCell>
@@ -169,27 +264,59 @@ export default async function DiscountsPage({
               discounts.map((discount) => (
                 <TableRow key={discount.id}>
                   <TableCell>
-                    <Link
-                      href={`/admin/products/${discount.product.id}`}
-                      className="font-medium text-indigo-600 hover:underline"
-                    >
-                      {discount.product.name}
-                    </Link>
+                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
+                      {discount.image ? (
+                        <SimpleS3Image
+                          src={discount.image}
+                          alt={discount.title || "Discount"}
+                          width={48}
+                          height={48}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-green-100 to-green-200 flex items-center justify-center">
+                          <span className="text-green-600 font-bold text-xs">
+                            {discount.percentage}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900">
+                        {discount.title || "Discount"}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {getTargetDescription(discount)}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="font-medium">
                     {discount.percentage}%
                   </TableCell>
-                  <TableCell>${discount.product.price.toFixed(2)}</TableCell>
-                  <TableCell className="text-green-600">
-                    $
-                    {getDiscountedPrice(
-                      discount.product.price,
-                      discount.percentage
-                    )}
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {getTargetBadges(discount)}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    {formatDate(discount.startDate)} to{" "}
-                    {formatDate(discount.endDate)}
+                    {formatDateForDisplay(discount.startDate)} to{" "}
+                    {formatDateForDisplay(discount.endDate)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {discount.availableOnline && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          Online
+                        </span>
+                      )}
+                      {discount.availableInStore && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          In-Store
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <span
@@ -211,13 +338,6 @@ export default async function DiscountsPage({
           </TableBody>
         </Table>
       </div>
-
-      {/* Pagination */}
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        totalItems={totalDiscounts}
-      />
     </div>
   );
 }

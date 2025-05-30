@@ -97,6 +97,71 @@ export default function BasicInfoTab({ control }: BasicInfoTabProps) {
             </FormItem>
           )}
         />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <FormField
+                control={control}
+                name="barcode"
+                render={({ field }) => (
+                    <FormItem>
+                        <FormLabel
+                            style={{ color: "#2c3e50" }}
+                            className="font-medium text-base"
+                        >
+                            Barcode (Optional)
+                        </FormLabel>
+                        <FormControl>
+                            <Input
+                                placeholder="Base barcode"
+                                className="border-2"
+                                style={{
+                                    borderColor: "#bdc3c7",
+                                    color: "#2c3e50",
+                                    backgroundColor: "white",
+                                }}
+                                {...field}
+                            />
+                        </FormControl>
+                        <FormDescription style={{ color: "#7f8c8d" }}>
+                            Base barcode for the product.
+                        </FormDescription>
+                        <FormMessage className="text-red-600" />
+                    </FormItem>
+                )}
+            />
+          <FormField
+            control={control}
+            name="sku"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel
+                  style={{ color: "#2c3e50" }}
+                  className="font-medium text-base"
+                >
+                  SKU (Optional)
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Base SKU for variants"
+                    className="border-2"
+                    style={{
+                      borderColor: "#bdc3c7",
+                      color: "#2c3e50",
+                      backgroundColor: "white",
+                    }}
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription style={{ color: "#7f8c8d" }}>
+                  Base SKU that variants can extend.
+                </FormDescription>
+                <FormMessage className="text-red-600" />
+              </FormItem>
+            )}
+          />
+
+
+        </div>
       </CardContent>
     </Card>
   );
